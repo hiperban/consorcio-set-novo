@@ -82,7 +82,7 @@ export default function Home() {
 
       <Filters data={data} onFilterChange={setFilters} />
 
-      <div className="grid gap-6 [grid-template-columns:repeat(auto-fit,minmax(360px,1fr))]">
+      <div className="grid gap-6 [grid-template-columns:repeat(auto-fit,minmax(415px,1fr))]">
         {filtered.map(g => (
           <GroupCard key={g.id} group={g} onCompareToggle={onCompareToggle} />
         ))}
