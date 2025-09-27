@@ -28,6 +28,14 @@ const badgeClass =
     : tipo.includes('INTEGRAL')
       ? 'bg-emerald-100 text-emerald-700 border border-emerald-200'
       : 'bg-gray-100 text-gray-700 border border-gray-200';
+  const tipo = String(group.tipoGrupo || '').toUpperCase();
+
+const badgeClass = tipo.includes('INTEGRAL')
+  ? 'bg-emerald-600 text-white border-emerald-600'  // verde sólido
+  : tipo.includes('REDUZIDA')
+    ? 'bg-rose-600 text-white border-rose-600'      // (opcional) vermelho/rosa sólido
+    : 'bg-gray-200 text-gray-800 border-gray-200';  // fallback
+
 
   return (
     <div className="card flex flex-col gap-4">
