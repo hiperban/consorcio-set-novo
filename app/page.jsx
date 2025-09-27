@@ -1,80 +1,92 @@
 'use client';
-import { useCallback, useEffect, useMemo, useState } from 'react';
+export const dynamic = 'force-dynamic';
+
+import { useEffect, useMemo, useState } from 'react';
 import Filters from '@/components/Filters';
 import GroupCard from '@/components/GroupCard';
-import CompareBar from '@/components/CompareBar';
+
+/** Junta vários datasets do /public/data */
+function mergeDatasets(list) {
+  const admMap = new Map(); // id -> {id,nome}
+  const grupos = [];
+  for (const d of list) {
+    (d?.administradoras || []).forEach(a => { if (!admMap.has(a.id)) admMap.set(a.id, a); });
+    (d?.grupos || []).forEach(g => grupos.push(g));
+  }
+  return { administradoras: Array.from(admMap.values()), grupos };
+}
 
 export default function Home() {
-  const [data, setData] = useState(null);
+  const [data, setData] = useState({ administradoras: [], grupos: [] });
   const [filters, setFilters] = useState({});
-  const [selected, setSelected] = useState([]);
+  const [compare, setCompare] = useState([]);
 
-    useEffect(() => {
-  async function loadAll() {
-    try {
-      const man = await fetch('/data/_manifest.json', { cache: 'no-store' }).then(r => r.json());
-      const files = Array.isArray(man.datasets) ? man.datasets : [];
-      const datasets = await Promise.all(
-        files.map(f => fetch(`/data/${f}`, { cache: 'no-store' }).then(r => r.json()))
-      );
-
-      const admMap = new Map();
-      const grupos = [];
-      for (const d of datasets) {
-        (d.administradoras || []).forEach(a => { if (!admMap.has(a.id)) admMap.set(a.id, a); });
-        (d.grupos || []).forEach(g => grupos.push(g));
+  useEffect(() => {
+    async function loadAll() {
+      try {
+        const man = await fetch('/data/_manifest.json', { cache: 'no-store' }).then(r => r.json());
+        const files = Array.isArray(man.datasets) ? man.datasets : [];
+        const datasets = await Promise.all(
+          files.map(f => fetch(`/data/${f}`, { cache: 'no-store' }).then(r => r.json()))
+        );
+        setData(mergeDatasets(datasets));
+      } catch (e) {
+        console.error('Erro ao carregar datasets:', e);
+        setData({ administradoras: [], grupos: [] });
       }
-      setData({ administradoras: Array.from(admMap.values()), grupos });
-    } catch (e) {
-      console.error('Erro ao carregar datasets:', e);
-      setData({ administradoras: [], grupos: [] });
     }
-  }
-  loadAll();
-}, []);
+    loadAll();
+  }, []);
 
-  },[]);
-
-  const filtered = useMemo(()=>{
-    const list = data?.grupos || [];
-    const norm = (s) => (s==null? '' : String(s)).normalize('NFD').replace(/\p{Diacritic}/gu,'').trim().toUpperCase();
-    return list.filter(g => {
-      if (filters.minCarta !== undefined && g.valorCarta < filters.minCarta) return false;
-      if (filters.maxCarta !== undefined && g.valorCarta > filters.maxCarta) return false;
-      if (filters.adm && norm(g.nomeAdministradora) !== norm(filters.adm)) return false;
-      if (filters.lanceMin !== undefined && g.lanceMedio < filters.lanceMin) return false;
-      if (filters.produto && norm(g.produto) !== norm(filters.produto)) return false;
-      if (filters.tipoGrupo && norm(g.tipoGrupo) !== norm(filters.tipoGrupo)) return false;
-      if (filters.prazo !== undefined && g.prazo !== filters.prazo) return false;
-      return true;
+  // aplica filtros básicos (mesma lógica que você já tinha)
+  const filtered = useMemo(() => {
+    const {
+      minCarta, maxCarta, adm, lanceMin, produto, tipoGrupo, prazo
+    } = filters || {};
+    return (data.grupos || []).filter(g => {
+      const okMin = minCarta == null ? true : g.valorCarta >= minCarta;
+      const okMax = maxCarta == null ? true : g.valorCarta <= maxCarta;
+      const okAdm = !adm ? true : (g.nomeAdministradora || '').toUpperCase() === String(adm).toUpperCase();
+      const okLance = lanceMin == null ? true : (Number(g.lanceMedio) >= Number(lanceMin));
+      const okProd = !produto ? true : String(g.produto).normalize('NFD').replace(/\p{Diacritic}/gu,'').toUpperCase()
+                               === String(produto).normalize('NFD').replace(/\p{Diacritic}/gu,'').toUpperCase();
+      const okTipo = !tipoGrupo ? true : String(g.tipoGrupo).toUpperCase() === String(tipoGrupo).toUpperCase();
+      const okPrazo = prazo == null ? true : Number(g.prazo) === Number(prazo);
+      return okMin && okMax && okAdm && okLance && okProd && okTipo && okPrazo;
     });
   }, [data, filters]);
 
-  const onCompareToggle = useCallback((group, checked)=>{
-    setSelected(prev=>{
-      if (checked){
-        if (prev.find(p=>p.id===group.id)) return prev;
-        if (prev.length >= 3) { alert('Você pode comparar até 3 grupos.'); return prev; }
-        return [...prev, group];
+  function onCompareToggle(group, checked) {
+    setCompare(prev => {
+      const set = new Set(prev.map(x => x.id));
+      if (checked) {
+        if (!set.has(group.id)) return [...prev, group];
+        return prev;
       } else {
-        return prev.filter(p=>p.id!==group.id);
+        return prev.filter(x => x.id !== group.id);
       }
     });
-  },[]);
+    // salva no localStorage (usado no compare)
+    try {
+      const ids = (checked ? [...compare, group] : compare.filter(x => x.id !== group.id)).map(x => x.id);
+      localStorage.setItem('compareSelection', JSON.stringify(ids));
+    } catch {}
+  }
 
   return (
-    <div className="flex flex-col gap-6">
-      <div className="card bg-gradient-to-r from-brand-50 to-white border-none">
-        <h1 className="text-2xl font-bold text-brand-900"> SIMULADOR DE CONSÓRCIO </h1>
-        <p className="text-sm text-gray-600">Simule, Compare e Contrate – tudo em um só lugar ✨ </p>
-      </div>
-      <Filters data={data} onFilterChange={setFilters}/>
-<div className="grid gap-6 [grid-template-columns:repeat(auto-fit,minmax(410px,1fr))]">
+    <main className="container py-6 space-y-6">
+      <header>
+        <h1 className="text-2xl font-semibold text-brand-800">Simulador de Consórcio</h1>
+        <p className="text-sm text-gray-600">Filtros dinâmicos, visual moderno e contratação direta.</p>
+      </header>
+
+      <Filters data={data} onFilterChange={setFilters} />
+
+      <div className="grid gap-6 [grid-template-columns:repeat(auto-fit,minmax(360px,1fr))]">
         {filtered.map(g => (
-          <GroupCard key={g.id} group={g} onCompareToggle={onCompareToggle}/>
+          <GroupCard key={g.id} group={g} onCompareToggle={onCompareToggle} />
         ))}
       </div>
-      <CompareBar selected={selected}/>
-    </div>
-  )
+    </main>
+  );
 }
