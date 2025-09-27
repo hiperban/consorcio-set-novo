@@ -1,11 +1,13 @@
 'use client';
 export const dynamic = 'force-dynamic';
 
-import { Suspense, useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
+import Filters from '@/components/Filters';
+import GroupCard from '@/components/GroupCard';
 
 /** Junta vários datasets do /public/data */
 function mergeDatasets(list) {
-  const admMap = new Map();
+  const admMap = new Map(); // id -> {id,nome}
   const grupos = [];
   for (const d of list) {
     (d?.administradoras || []).forEach(a => { if (!admMap.has(a.id)) admMap.set(a.id, a); });
@@ -14,51 +16,10 @@ function mergeDatasets(list) {
   return { administradoras: Array.from(admMap.values()), grupos };
 }
 
-function Table({ selected, all }) {
-  const rows = [
-    ['Grupo', g => g.numeroGrupo],
-    ['Administradora', g => g.nomeAdministradora],
-    ['Produto', g => g.produto],
-    ['Tipo de Grupo', g => g.tipoGrupo],
-    ['Valor Carta', g => (g.valorCarta ?? 0).toLocaleString('pt-BR', { style:'currency', currency:'BRL' })],
-    ['Parcela', g => (g.valorParcela ?? 0).toLocaleString('pt-BR', { style:'currency', currency:'BRL' })],
-    ['Taxa Adm', g => `${g.taxaAdm}%`],
-    ['% Lance Médio', g => `${g.lanceMedio}%`],
-    ['% Lance Embutido', g => `${g.lanceEmbutidoPermite}%`],
-    ['Participantes', g => g.totalParticipantes],
-    ['Prazo (meses)', g => g.prazo],
-    ['Assembleia (dia)', g => g.diaAssembleia],
-  ];
-
-  return (
-    <div className="card overflow-auto">
-      <table className="min-w-full text-sm">
-        <thead>
-          <tr>
-            <th className="text-left p-3 w-48">Campo</th>
-            {selected.map(g => (
-              <th key={g.id} className="text-left p-3">{g.nomeAdministradora} #{g.numeroGrupo}</th>
-            ))}
-          </tr>
-        </thead>
-        <tbody>
-          {rows.map(([label,get])=>(
-            <tr key={label} className="border-t">
-              <td className="p-3 text-gray-600">{label}</td>
-              {selected.map(g=>(
-                <td key={g.id+label} className="p-3 font-medium">{get(g)}</td>
-              ))}
-            </tr>
-          ))}
-        </tbody>
-      </table>
-    </div>
-  );
-}
-
-export default function ComparePage() {
+export default function Home() {
   const [data, setData] = useState({ administradoras: [], grupos: [] });
-  const [selectedIds, setSelectedIds] = useState([]);
+  const [filters, setFilters] = useState({});
+  const [compare, setCompare] = useState([]);
 
   useEffect(() => {
     async function loadAll() {
@@ -69,34 +30,63 @@ export default function ComparePage() {
           files.map(f => fetch(`/data/${f}`, { cache: 'no-store' }).then(r => r.json()))
         );
         setData(mergeDatasets(datasets));
-      } catch {
+      } catch (e) {
+        console.error('Erro ao carregar datasets:', e);
         setData({ administradoras: [], grupos: [] });
       }
     }
     loadAll();
-
-    // tentar recuperar seleção do localStorage
-    try {
-      const raw = localStorage.getItem('compareSelection');
-      if (raw) setSelectedIds(JSON.parse(raw));
-    } catch {}
   }, []);
 
-  const selected = useMemo(() => {
-    const set = new Set(selectedIds);
-    return (data.grupos || []).filter(g => set.has(g.id)).slice(0, 4); // até 4 itens
-  }, [data, selectedIds]);
+  // aplica filtros básicos (mesma lógica que você já tinha)
+  const filtered = useMemo(() => {
+    const {
+      minCarta, maxCarta, adm, lanceMin, produto, tipoGrupo, prazo
+    } = filters || {};
+    return (data.grupos || []).filter(g => {
+      const okMin = minCarta == null ? true : g.valorCarta >= minCarta;
+      const okMax = maxCarta == null ? true : g.valorCarta <= maxCarta;
+      const okAdm = !adm ? true : (g.nomeAdministradora || '').toUpperCase() === String(adm).toUpperCase();
+      const okLance = lanceMin == null ? true : (Number(g.lanceMedio) >= Number(lanceMin));
+      const okProd = !produto ? true : String(g.produto).normalize('NFD').replace(/\p{Diacritic}/gu,'').toUpperCase()
+                               === String(produto).normalize('NFD').replace(/\p{Diacritic}/gu,'').toUpperCase();
+      const okTipo = !tipoGrupo ? true : String(g.tipoGrupo).toUpperCase() === String(tipoGrupo).toUpperCase();
+      const okPrazo = prazo == null ? true : Number(g.prazo) === Number(prazo);
+      return okMin && okMax && okAdm && okLance && okProd && okTipo && okPrazo;
+    });
+  }, [data, filters]);
+
+  function onCompareToggle(group, checked) {
+    setCompare(prev => {
+      const set = new Set(prev.map(x => x.id));
+      if (checked) {
+        if (!set.has(group.id)) return [...prev, group];
+        return prev;
+      } else {
+        return prev.filter(x => x.id !== group.id);
+      }
+    });
+    // salva no localStorage (usado no compare)
+    try {
+      const ids = (checked ? [...compare, group] : compare.filter(x => x.id !== group.id)).map(x => x.id);
+      localStorage.setItem('compareSelection', JSON.stringify(ids));
+    } catch {}
+  }
 
   return (
     <main className="container py-6 space-y-6">
       <header>
-        <h1 className="text-2xl font-semibold text-brand-800">Comparar Grupos</h1>
-        <p className="text-sm text-gray-600">Tabela lado a lado com até 4 grupos.</p>
+        <h1 className="text-2xl font-semibold text-brand-800">Simulador de Consórcio</h1>
+        <p className="text-sm text-gray-600">Filtros dinâmicos, visual moderno e contratação direta.</p>
       </header>
 
-      <Suspense>
-        <Table selected={selected} all={data.grupos||[]} />
-      </Suspense>
+      <Filters data={data} onFilterChange={setFilters} />
+
+      <div className="grid gap-6 [grid-template-columns:repeat(auto-fit,minmax(360px,1fr))]">
+        {filtered.map(g => (
+          <GroupCard key={g.id} group={g} onCompareToggle={onCompareToggle} />
+        ))}
+      </div>
     </main>
   );
 }
