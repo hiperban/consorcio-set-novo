@@ -21,6 +21,13 @@ export default function GroupCard({ group, onCompareToggle }) {
     ['Participantes', `${group.totalParticipantes}`, true],
     ['Assembleia (dia)', `${group.diaAssembleia}`, true],
   ];
+  const tipo = String(group.tipoGrupo || '').toUpperCase();
+const badgeClass =
+  tipo.includes('REDUZIDA')
+    ? 'bg-rose-100 text-rose-700 border border-rose-200'
+    : tipo.includes('INTEGRAL')
+      ? 'bg-emerald-100 text-emerald-700 border border-emerald-200'
+      : 'bg-gray-100 text-gray-700 border border-gray-200';
 
   return (
     <div className="card flex flex-col gap-4">
@@ -28,7 +35,9 @@ export default function GroupCard({ group, onCompareToggle }) {
         <h3 className="text-lg font-semibold text-brand-800">
           Grupo {group.numeroGrupo}
         </h3>
-        <span className="badge">{group.tipoGrupo}</span>
+<span className={`badge ${badgeClass}`}>
+  {group.tipoGrupo}
+</span>
       </div>
 
       {/* 1 coluna até telas grandes; só vira 2 colunas em xl pra não espremer texto */}
