@@ -1,0 +1,62 @@
+{
+  "administradoras": [
+    {
+      "id": "adm1",
+      "nome": "RODOBENS"
+    },
+    {
+      "id": "adm2",
+      "nome": "PORTO SEGURO"
+    }
+  ],
+  "grupos": [
+    {
+      "id": "G-1015",
+      "numeroGrupo": "1015",
+      "administradoraId": "adm1",
+      "nomeAdministradora": "RODOBENS",
+      "produto": "SERVIÇOS",
+      "tipoGrupo": "PARCELA INTEGRAL",
+      "valorCarta": 5000,
+      "valorParcela": 150,
+      "taxaAdm": 20,
+      "lanceMedio": 25,
+      "lanceEmbutidoPermite": 0,
+      "totalParticipantes": 250,
+      "diaAssembleia": "10",
+      "prazo": 96
+    },
+    {
+      "id": "G-1015B",
+      "numeroGrupo": "1015",
+      "administradoraId": "adm1",
+      "nomeAdministradora": "RODOBENS",
+      "produto": "SERVIÇOS",
+      "tipoGrupo": "PARCELA INTEGRAL",
+      "valorCarta": 6000,
+      "valorParcela": 160,
+      "taxaAdm": 20,
+      "lanceMedio": 20,
+      "lanceEmbutidoPermite": 0,
+      "totalParticipantes": 200,
+      "diaAssembleia": "10",
+      "prazo": 50
+    },
+    {
+      "id": "G-2525",
+      "numeroGrupo": "2525",
+      "administradoraId": "adm2",
+      "nomeAdministradora": "PORTO SEGURO",
+      "produto": "AUTOMOVEL",
+      "tipoGrupo": "PARCELA REDUZIDA",
+      "valorCarta": 50000,
+      "valorParcela": 250,
+      "taxaAdm": 20,
+      "lanceMedio": 50,
+      "lanceEmbutidoPermite": 30,
+      "totalParticipantes": 500,
+      "diaAssembleia": "20",
+      "prazo": 96
+    }
+  ]
+}
