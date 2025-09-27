@@ -47,7 +47,7 @@ export default function Home() {
     <div className="flex flex-col gap-6">
       <div className="card bg-gradient-to-r from-brand-50 to-white border-none">
         <h1 className="text-2xl font-bold text-brand-900">Simulador de Consórcio</h1>
-        <p className="text-sm text-gray-600">Filtros dinâmicos, visual moderno e contratação direta.</p>
+        <p className="text-sm text-gray-600">Simule, Compare e Contrate – tudo em um só lugar ✨ </p>
       </div>
       <Filters data={data} onFilterChange={setFilters}/>
 <div className="grid gap-6 [grid-template-columns:repeat(auto-fit,minmax(410px,1fr))]">
