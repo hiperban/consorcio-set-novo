@@ -24,13 +24,15 @@ export default function GroupCard({ group, onCompareToggle }){
       </div>
 
       {/* Grade responsiva: 1 coluna no mobile, 2 colunas no md+ */}
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-x-8 gap-y-2 text-sm">
-        {rows.map(([label, value]) => (
-          <div key={label} className="flex">
-            <span className="shrink-0 w-36 text-gray-500">{label}:</span>
-            <span className="font-semibold break-words whitespace-normal">{value}</span>
-          </div>
-        ))}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-x-6 gap-y-2 text-sm">
+  {rows.map(([label, value]) => (
+    <div key={label} className="flex min-w-0">
+      <span className="shrink-0 w-32 text-gray-500">{label}:</span>
+      <span className="font-semibold break-words whitespace-normal overflow-hidden text-ellipsis">
+        {value}
+      </span>
+    </div>
+  ))}
       </div>
 
       <div className="flex items-center justify-between gap-2">
