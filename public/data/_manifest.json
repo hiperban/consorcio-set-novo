@@ -1,6 +1,7 @@
 {
   "datasets": [
     "rodobens-imovel.json",
-    "tradicao-placa-solar.json"
+    "tradicao-placa-solar.json",
+    "tradicao-equipamentos.json"
   ]
 }
