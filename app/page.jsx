@@ -46,7 +46,7 @@ export default function Home() {
   return (
     <div className="flex flex-col gap-6">
       <div className="card bg-gradient-to-r from-brand-50 to-white border-none">
-        <h1 className="text-2xl font-bold text-brand-900">SIMULADOR DE CONSÓRCIO - HIPERBAN</h1>
+        <h1 className="text-2xl font-bold text-brand-900"> SIMULADOR DE CONSÓRCIO </h1>
         <p className="text-sm text-gray-600">Simule, Compare e Contrate – tudo em um só lugar ✨ </p>
       </div>
       <Filters data={data} onFilterChange={setFilters}/>
