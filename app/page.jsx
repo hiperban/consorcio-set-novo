@@ -1,3 +1,5 @@
+export const dynamic = 'force-dynamic';
+
 'use client';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import Filters from '@/components/Filters';
@@ -9,11 +11,30 @@ export default function Home() {
   const [filters, setFilters] = useState({});
   const [selected, setSelected] = useState([]);
 
-  useEffect(()=>{
-    fetch('/data/groups.json')
-      .then(r=>r.json())
-      .then(setData)
-      .catch(()=>setData({ administradoras:[], grupos:[] }));
+    useEffect(() => {
+  async function loadAll() {
+    try {
+      const man = await fetch('/data/_manifest.json', { cache: 'no-store' }).then(r => r.json());
+      const files = Array.isArray(man.datasets) ? man.datasets : [];
+      const datasets = await Promise.all(
+        files.map(f => fetch(`/data/${f}`, { cache: 'no-store' }).then(r => r.json()))
+      );
+
+      const admMap = new Map();
+      const grupos = [];
+      for (const d of datasets) {
+        (d.administradoras || []).forEach(a => { if (!admMap.has(a.id)) admMap.set(a.id, a); });
+        (d.grupos || []).forEach(g => grupos.push(g));
+      }
+      setData({ administradoras: Array.from(admMap.values()), grupos });
+    } catch (e) {
+      console.error('Erro ao carregar datasets:', e);
+      setData({ administradoras: [], grupos: [] });
+    }
+  }
+  loadAll();
+}, []);
+
   },[]);
 
   const filtered = useMemo(()=>{
