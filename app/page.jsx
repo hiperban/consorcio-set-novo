@@ -50,7 +50,7 @@ export default function Home() {
         <p className="text-sm text-gray-600">Filtros dinâmicos, visual moderno e contratação direta.</p>
       </div>
       <Filters data={data} onFilterChange={setFilters}/>
-      <div className="grid sm:grid-cols-2 xl:grid-cols-3 gap-6">
+<div className="grid gap-6 [grid-template-columns:repeat(auto-fit,minmax(360px,1fr))]">
         {filtered.map(g => (
           <GroupCard key={g.id} group={g} onCompareToggle={onCompareToggle}/>
         ))}
