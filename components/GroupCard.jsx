@@ -32,24 +32,18 @@ export default function GroupCard({ group, onCompareToggle }) {
       </div>
 
       {/* 1 coluna até telas grandes; só vira 2 colunas em xl pra não espremer texto */}
-      <div className="grid grid-cols-1 xl:grid-cols-2 gap-x-10 gap-y-2 text-sm">
-        {rows.map(([label, value, nowrap]) => (
-          <div key={label} className="flex min-w-0 leading-6">
-            {/* rótulo com largura confortável */}
-            <span className="shrink-0 w-40 text-gray-500">{label}:</span>
-            {/* valores: não quebrar palavras no meio; preços/prazos ficam em uma linha */}
-            <span
-              className={[
-                'font-semibold min-w-0',
-                nowrap ? 'whitespace-nowrap overflow-hidden text-ellipsis' : 'whitespace-normal break-normal',
-              ].join(' ')}
-              title={String(value)}
-            >
-              {value}
-            </span>
-          </div>
-        ))}
-      </div>
+     <div className="grid grid-cols-1 xl:grid-cols-2 gap-x-6 gap-y-1.5 text-sm">
+  {rows.map(([label, value]) => (
+    <div key={label} className="flex min-w-0 leading-6">
+      {/* rótulo menor e mais próximo */}
+      <span className="shrink-0 w-28 pr-2 text-gray-500">{label}:</span>
+      {/* valor ocupa o restante; sem quebrar palavras no meio */}
+      <span className="flex-1 font-semibold min-w-0 whitespace-normal break-normal">
+        {value}
+      </span>
+    </div>
+  ))}
+</div>
 
       <div className="flex items-center justify-between gap-2">
         <label className="inline-flex items-center gap-2 text-sm">
