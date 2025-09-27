@@ -13,9 +13,16 @@ function parseBRLToNumber(masked) {
   if (!digits) return 0;
   return parseInt(digits, 10) / 100;
 }
+function fmtBRL(n) {
+  if (n === undefined || n === null || isNaN(Number(n))) return '';
+  return Number(n).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
+}
 
 export default function AdminForm({ initialData }){
   const [data, setData] = useState(initialData || { administradoras: [], grupos: [] });
+
+  // manter campos fixos entre inclusões
+  const [keepFixed, setKeepFixed] = useState(true);
 
   // formulário de administradora
   const [admForm, setAdmForm] = useState({ id:'', nome:'' });
@@ -24,8 +31,8 @@ export default function AdminForm({ initialData }){
   const [groupForm, setGroupForm] = useState({
     id:'', numeroGrupo:'', administradoraId:'',
     produto:'AUTOMOVEL', tipoGrupo:'PARCELA INTEGRAL',
-    valorCartaMasked:'',            // <— máscara BRL
-    valorParcelaMasked:'',          // <— máscara BRL
+    valorCartaMasked:'',            // máscara BRL
+    valorParcelaMasked:'',          // máscara BRL
     taxaAdm:'', lanceMedio:'', lanceEmbutidoPermite:'',
     totalParticipantes:'', diaAssembleia:'', prazo:''
   });
@@ -48,6 +55,35 @@ export default function AdminForm({ initialData }){
     setAdmForm({id:'', nome:''});
   };
   const removeAdm = (id)=> setData(prev=>({...prev, administradoras: prev.administradoras.filter(a=>a.id!==id)}));
+
+  // gera o "reset" do form após adicionar, preservando campos fixos se marcado
+  const resetAfterAdd = (prev) => {
+    if (!keepFixed) {
+      return {
+        id:'', numeroGrupo:'', administradoraId:'',
+        produto:'AUTOMOVEL', tipoGrupo:'PARCELA INTEGRAL',
+        valorCartaMasked:'', valorParcelaMasked:'',
+        taxaAdm:'', lanceMedio:'', lanceEmbutidoPermite:'',
+        totalParticipantes:'', diaAssembleia:'', prazo:''
+      };
+    }
+    // mantém campos "fixos" e limpa os que variam
+    return {
+      id:'', // sempre novo
+      numeroGrupo: prev.numeroGrupo,
+      administradoraId: prev.administradoraId,
+      produto: prev.produto,
+      tipoGrupo: prev.tipoGrupo,
+      valorCartaMasked:'',          // limpa para digitar o próximo valor
+      valorParcelaMasked:'',        // limpa para digitar o próximo valor
+      taxaAdm: prev.taxaAdm,
+      lanceMedio: prev.lanceMedio,
+      lanceEmbutidoPermite: prev.lanceEmbutidoPermite,
+      totalParticipantes: prev.totalParticipantes,
+      diaAssembleia: prev.diaAssembleia,
+      prazo:''                      // normalmente muda
+    };
+  };
 
   const addGroup = ()=>{
     if(!groupForm.id || !groupForm.numeroGrupo || !groupForm.administradoraId) return;
@@ -76,18 +112,37 @@ export default function AdminForm({ initialData }){
     };
 
     setData(prev=>({...prev, grupos:[...prev.grupos, parsed]}));
-
-    // reset do form
-    setGroupForm({
-      id:'', numeroGrupo:'', administradoraId:'',
-      produto:'AUTOMOVEL', tipoGrupo:'PARCELA INTEGRAL',
-      valorCartaMasked:'', valorParcelaMasked:'',
-      taxaAdm:'', lanceMedio:'', lanceEmbutidoPermite:'',
-      totalParticipantes:'', diaAssembleia:'', prazo:''
-    });
+    setGroupForm(resetAfterAdd(groupForm));
   };
 
   const removeGroup = (id)=> setData(prev=>({...prev, grupos: prev.grupos.filter(g=>g.id!==id)}));
+
+  // DUPLICAR: carrega dados do grupo no formulário (ID vazio para novo)
+  const duplicateGroup = (g) => {
+    // tentar pegar o administradoraId; se não tiver, buscar pelo nome
+    const byId = g.administradoraId;
+    const byName = (data.administradoras||[]).find(a => a.nome === g.nomeAdministradora)?.id;
+    const administradoraId = byId || byName || '';
+
+    setGroupForm({
+      id:'', // novo id será digitado
+      numeroGrupo: String(g.numeroGrupo ?? ''),
+      administradoraId,
+      produto: String(g.produto ?? 'AUTOMOVEL'),
+      tipoGrupo: String(g.tipoGrupo ?? 'PARCELA INTEGRAL'),
+      valorCartaMasked: fmtBRL(g.valorCarta),
+      valorParcelaMasked: fmtBRL(g.valorParcela),
+      taxaAdm: String(g.taxaAdm ?? ''),
+      lanceMedio: String(g.lanceMedio ?? ''),
+      lanceEmbutidoPermite: String(g.lanceEmbutidoPermite ?? ''),
+      totalParticipantes: String(g.totalParticipantes ?? ''),
+      diaAssembleia: String(g.diaAssembleia ?? ''),
+      prazo: String(g.prazo ?? '')
+    });
+
+    // rolar para o topo do form (opcional)
+    if (typeof window !== 'undefined') window.scrollTo({ top: 0, behavior: 'smooth' });
+  };
 
   const downloadJson = ()=>{
     const blob = new Blob([JSON.stringify(data, null, 2)], { type:'application/json' });
@@ -124,7 +179,19 @@ export default function AdminForm({ initialData }){
       </section>
 
       <section className="card">
-        <h3 className="font-semibold mb-3 text-brand-800">Grupos</h3>
+        <h3 className="font-semibold mb-2 text-brand-800">Grupos</h3>
+
+        {/* Preferência: manter campos fixos entre inclusões */}
+        <div className="mb-3">
+          <label className="inline-flex items-center gap-2 text-sm">
+            <input type="checkbox" checked={keepFixed} onChange={e=>setKeepFixed(e.target.checked)} />
+            Manter campos fixos ao adicionar
+          </label>
+          <div className="text-xs text-gray-500 mt-1">
+            Mantém: Número, Administradora, Produto, Tipo, Taxa Adm, % Lance, % Embutido, Participantes e Assembleia. Limpa: ID, Valor Carta, Valor Parcela e Prazo.
+          </div>
+        </div>
+
         <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
           <input placeholder="ID" className="border rounded-2xl px-3 py-2"
                  value={groupForm.id} onChange={e=>setGroupForm({...groupForm,id:e.target.value})}/>
@@ -190,7 +257,10 @@ export default function AdminForm({ initialData }){
               <span>
                 Grupo {g.numeroGrupo} — {g.nomeAdministradora} — {g.produto} — R$ {g.valorCarta?.toLocaleString('pt-BR')}
               </span>
-              <button onClick={()=>removeGroup(g.id)} className="text-red-600">Remover</button>
+              <div className="flex gap-3">
+                <button onClick={()=>duplicateGroup(g)} className="text-brand-600 hover:underline">Duplicar</button>
+                <button onClick={()=>removeGroup(g.id)} className="text-red-600">Remover</button>
+              </div>
             </li>
           ))}
         </ul>
