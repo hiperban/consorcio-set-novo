@@ -1,5 +1,5 @@
 'use client';
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 
 /* ===== Helpers de máscara BRL ===== */
 function maskBRL(input) {
@@ -37,18 +37,7 @@ export default function AdminForm({ initialData }){
     totalParticipantes:'', diaAssembleia:'', prazo:''
   });
 
-  // manter nome da administradora derivado do ID
-  useEffect(()=>{
-    const map = Object.fromEntries((data.administradoras||[]).map(a=>[a.id,a.nome]));
-    setData(prev => ({
-      ...prev,
-      grupos: (prev.grupos||[]).map(g=>({
-        ...g,
-        nomeAdministradora: map[g.administradoraId] || g.nomeAdministradora
-      }))
-    }));
-  }, [data.administradoras?.length]);
-
+  /* ---------- Administradoras ---------- */
   const addAdm = ()=>{
     if(!admForm.id || !admForm.nome) return;
     setData(prev=>({...prev, administradoras:[...prev.administradoras, {...admForm}]}));
@@ -56,6 +45,7 @@ export default function AdminForm({ initialData }){
   };
   const removeAdm = (id)=> setData(prev=>({...prev, administradoras: prev.administradoras.filter(a=>a.id!==id)}));
 
+  /* ---------- Grupos ---------- */
   // gera o "reset" do form após adicionar, preservando campos fixos se marcado
   const resetAfterAdd = (prev) => {
     if (!keepFixed) {
@@ -85,33 +75,39 @@ export default function AdminForm({ initialData }){
     };
   };
 
-  const addGroup = ()=>{
-    if(!groupForm.id || !groupForm.numeroGrupo || !groupForm.administradoraId) return;
+  const addGroup = () => {
+    // exigir somente numeroGrupo e administradoraId
+    if (!groupForm.numeroGrupo || !groupForm.administradoraId) return;
 
-    const admName = (data.administradoras||[]).find(a=>a.id===groupForm.administradoraId)?.nome || '';
+    const admName =
+      (data.administradoras || []).find(a => a.id === groupForm.administradoraId)?.nome || '';
 
-    // converter as máscaras para número
+    // ID automático se não preencher
+    const generatedId = `G-${String(groupForm.numeroGrupo).trim()}-${Date.now()}`;
+    const id = (groupForm.id && String(groupForm.id).trim()) || generatedId;
+
+    // converter máscaras para número
     const valorCarta = parseBRLToNumber(groupForm.valorCartaMasked);
     const valorParcela = parseBRLToNumber(groupForm.valorParcelaMasked);
 
     const parsed = {
-      id: groupForm.id,
-      numeroGrupo: groupForm.numeroGrupo,
+      id,
+      numeroGrupo: String(groupForm.numeroGrupo).trim(),
       administradoraId: groupForm.administradoraId,
       produto: groupForm.produto,
       tipoGrupo: groupForm.tipoGrupo,
-      valorCarta,                     // número
-      valorParcela,                   // número
+      valorCarta,                    // número
+      valorParcela,                  // número
       taxaAdm: Number(groupForm.taxaAdm || 0),
       lanceMedio: Number(groupForm.lanceMedio || 0),
       lanceEmbutidoPermite: Number(groupForm.lanceEmbutidoPermite || 0),
       totalParticipantes: Number(groupForm.totalParticipantes || 0),
       diaAssembleia: groupForm.diaAssembleia,
       prazo: Number(groupForm.prazo || 0),
-      nomeAdministradora: admName
+      nomeAdministradora: admName,
     };
 
-    setData(prev=>({...prev, grupos:[...prev.grupos, parsed]}));
+    setData(prev => ({ ...prev, grupos: [...(prev.grupos || []), parsed] }));
     setGroupForm(resetAfterAdd(groupForm));
   };
 
@@ -140,10 +136,10 @@ export default function AdminForm({ initialData }){
       prazo: String(g.prazo ?? '')
     });
 
-    // rolar para o topo do form (opcional)
     if (typeof window !== 'undefined') window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
+  /* ---------- Importar/Exportar JSON ---------- */
   const downloadJson = ()=>{
     const blob = new Blob([JSON.stringify(data, null, 2)], { type:'application/json' });
     const url = URL.createObjectURL(blob); const a = document.createElement('a');
@@ -163,7 +159,7 @@ export default function AdminForm({ initialData }){
                  value={admForm.id} onChange={e=>setAdmForm({...admForm,id:e.target.value})}/>
           <input placeholder="Nome" className="border rounded-2xl px-3 py-2"
                  value={admForm.nome} onChange={e=>setAdmForm({...admForm,nome:e.target.value})}/>
-          <button onClick={addAdm} className="btn-primary">Adicionar</button>
+          <button type="button" onClick={addAdm} className="btn-primary">Adicionar</button>
           <label className="text-sm text-gray-500 flex items-center">
             Importar JSON: <input type="file" accept="application/json" className="ml-2" onChange={handleUpload}/>
           </label>
@@ -172,7 +168,7 @@ export default function AdminForm({ initialData }){
           {(data.administradoras||[]).map(a=>(
             <li key={a.id} className="py-2 flex items-center justify-between">
               <span className="text-sm">{a.id} — <b>{a.nome}</b></span>
-              <button onClick={()=>removeAdm(a.id)} className="text-red-600 text-sm">Remover</button>
+              <button type="button" onClick={()=>removeAdm(a.id)} className="text-red-600 text-sm">Remover</button>
             </li>
           ))}
         </ul>
@@ -247,8 +243,8 @@ export default function AdminForm({ initialData }){
           <input placeholder="Prazo (meses)" type="number" className="border rounded-2xl px-3 py-2"
                  value={groupForm.prazo} onChange={e=>setGroupForm({...groupForm,prazo:e.target.value})}/>
 
-          <button onClick={addGroup} className="btn-primary">Adicionar Grupo</button>
-          <button onClick={downloadJson} className="px-3 py-2 border rounded-2xl">Exportar JSON</button>
+          <button type="button" onClick={addGroup} className="btn-primary">Adicionar Grupo</button>
+          <button type="button" onClick={downloadJson} className="px-3 py-2 border rounded-2xl">Exportar JSON</button>
         </div>
 
         <ul className="mt-3 divide-y">
@@ -258,8 +254,8 @@ export default function AdminForm({ initialData }){
                 Grupo {g.numeroGrupo} — {g.nomeAdministradora} — {g.produto} — R$ {g.valorCarta?.toLocaleString('pt-BR')}
               </span>
               <div className="flex gap-3">
-                <button onClick={()=>duplicateGroup(g)} className="text-brand-600 hover:underline">Duplicar</button>
-                <button onClick={()=>removeGroup(g.id)} className="text-red-600">Remover</button>
+                <button type="button" onClick={()=>duplicateGroup(g)} className="text-brand-600 hover:underline">Duplicar</button>
+                <button type="button" onClick={()=>removeGroup(g.id)} className="text-red-600">Remover</button>
               </div>
             </li>
           ))}
