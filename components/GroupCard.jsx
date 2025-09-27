@@ -24,7 +24,7 @@ export default function GroupCard({ group, onCompareToggle }) {
   const tipo = String(group.tipoGrupo || '').toUpperCase();
 const badgeClass =
   tipo.includes('REDUZIDA')
-    ? 'bg-rose-100 text-rose-700 border border-rose-200'
+    ? 'bg-sky-100 text-sky-700 border-sky-200'
     : tipo.includes('INTEGRAL')
       ? 'bg-emerald-100 text-emerald-700 border border-emerald-200'
       : 'bg-gray-100 text-gray-700 border border-gray-200';
