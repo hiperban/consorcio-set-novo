@@ -1,0 +1,8 @@
+{
+  "datasets": [
+    "rodobens-imovel.json",
+    "rodobens-veiculos.json",
+    "porto-imovel.json",
+    "porto-veiculos.json"
+  ]
+}
