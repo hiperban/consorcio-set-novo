@@ -28,22 +28,20 @@ export default function Filters({ data, onFilterChange }){
   const [minCartaMasked, setMinCartaMasked] = useState('');
   const [maxCartaMasked, setMaxCartaMasked] = useState('');
 
-  // Estados dos selects armazenam o **valor normalizado**
-  const [adm, setAdm] = useState('');
+  // Estados dos filtros
+  const [admId, setAdmId] = useState('');     // <- agora guarda administradoraId
   const [lanceMin, setLanceMin] = useState('');
-  const [produto, setProduto] = useState('');
-  const [tipoGrupo, setTipoGrupo] = useState('');
+  const [produto, setProduto] = useState(''); // envia normalizado
+  const [tipoGrupo, setTipoGrupo] = useState(''); // envia normalizado
   const [prazo, setPrazo] = useState('');
 
-  /* Opções: value = normalizado, label = original */
+  /* Opções: Administradora usa ID estável; label é o nome original */
   const administradoras = useMemo(() => {
-    const map = new Map();
-    (data?.administradoras || []).forEach(a => {
-      const label = a?.nome ?? '';
-      const value = normalize(label);
-      if (value && !map.has(value)) map.set(value, { label, value });
-    });
-    return Array.from(map.values()).sort((x,y)=>x.label.localeCompare(y.label,'pt-BR'));
+    const list = Array.isArray(data?.administradoras) ? data.administradoras : [];
+    // filtra registros válidos e ordena por nome
+    return list
+      .filter(a => a && a.id && a.nome)
+      .sort((a,b)=> String(a.nome).localeCompare(String(b.nome), 'pt-BR'));
   }, [data]);
 
   const produtos = useMemo(() => {
@@ -65,15 +63,15 @@ export default function Filters({ data, onFilterChange }){
     onFilterChange({
       minCarta: Number.isNaN(min) ? undefined : min,
       maxCarta: Number.isNaN(max) ? undefined : max,
-      adm: adm || '',                 // já normalizado
-      produto: produto || '',         // já normalizado
-      tipoGrupo: tipoGrupo || '',     // já normalizado
+      admId: admId || '',                 // <- envia administradoraId
+      produto: produto || '',             // normalizado
+      tipoGrupo: tipoGrupo || '',         // normalizado
       lanceMin: Number.isNaN(lance) ? undefined : lance,
       prazo: Number.isNaN(prazoNum) ? undefined : prazoNum
     });
-  }, [minCartaMasked, maxCartaMasked, adm, lanceMin, produto, tipoGrupo, prazo, onFilterChange]);
+  }, [minCartaMasked, maxCartaMasked, admId, lanceMin, produto, tipoGrupo, prazo, onFilterChange]);
 
-  const onAdmChange = (value) => { setAdm(value); setProduto(''); setTipoGrupo(''); };
+  const onAdmChange = (value) => { setAdmId(value); setProduto(''); setTipoGrupo(''); };
 
   return (
     <div className="card grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3">
@@ -102,9 +100,9 @@ export default function Filters({ data, onFilterChange }){
 
       <div>
         <label className="block text-xs text-gray-600 mb-1">Administradora</label>
-        <select value={adm} onChange={e=>onAdmChange(e.target.value)} className="w-full border rounded-2xl px-3 py-2">
+        <select value={admId} onChange={e=>onAdmChange(e.target.value)} className="w-full border rounded-2xl px-3 py-2">
           <option value="">Todas</option>
-          {administradoras.map((opt)=>(<option key={opt.value} value={opt.value}>{opt.label}</option>))}
+          {administradoras.map(a => (<option key={a.id} value={a.id}>{a.nome}</option>))}
         </select>
       </div>
 
