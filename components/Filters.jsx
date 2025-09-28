@@ -1,7 +1,7 @@
 'use client';
 import { useMemo, useState } from 'react';
 
-/* Helpers */
+/* Helpers para chaves canônicas */
 function N(v){
   return String(v ?? '')
     .normalize('NFD')
@@ -22,18 +22,17 @@ function toTitle(s){
 }
 
 export default function Filters({ data, onApply }){
-  // estados simples (os selects guardam CHAVES)
   const [minCarta, setMinCarta] = useState('');
   const [maxCarta, setMaxCarta] = useState('');
-  const [adminKey, setAdminKey] = useState('');     // ← chave canônica
-  const [productKey, setProductKey] = useState(''); // ← chave canônica
-  const [tipoKey, setTipoKey] = useState('');       // ← chave canônica
+  const [adminKey, setAdminKey] = useState('');
+  const [productKey, setProductKey] = useState('');
+  const [tipoKey, setTipoKey] = useState('');
   const [lanceMin, setLanceMin] = useState('');
   const [prazo, setPrazo] = useState('');
 
-  // Administradoras: value = __adminKey, label = nome “bonito”
+  // Admins: value = __adminKey, label = nome
   const adminOptions = useMemo(() => {
-    const m = new Map(); // key -> label
+    const m = new Map();
     (data?.grupos || []).forEach(g => {
       const key = g.__adminKey;
       const label = g.__adminName || g.nomeAdministradora || key;
@@ -49,9 +48,9 @@ export default function Filters({ data, onApply }){
       .sort((a,b)=> String(a.label).localeCompare(String(b.label),'pt-BR'));
   }, [data]);
 
-  // Produtos dependem da admin escolhida: value = __productKey, label = texto amigável
+  // Produtos dependem da admin escolhida
   const productOptions = useMemo(() => {
-    const m = new Map(); // key -> label
+    const m = new Map();
     (data?.grupos || []).forEach(g => {
       if (adminKey && g.__adminKey !== adminKey) return;
       const key = g.__productKey;
@@ -64,22 +63,24 @@ export default function Filters({ data, onApply }){
   }, [data, adminKey]);
 
   const aplicar = () => {
-    onApply({
+    const payload = {
       minCarta: minCarta ? parseFloat(minCarta) : undefined,
       maxCarta: maxCarta ? parseFloat(maxCarta) : undefined,
-      adminKey: adminKey || '',      // ← passa CHAVE
-      productKey: productKey || '',  // ← passa CHAVE
-      tipoKey: tipoKey || '',        // ← passa CHAVE
+      adminKey: adminKey || '',
+      productKey: productKey || '',
+      tipoKey: tipoKey || '',
       lanceMin: lanceMin ? parseFloat(lanceMin) : undefined,
       prazo: prazo ? parseInt(prazo,10) : undefined,
-    });
+    };
+    console.debug('[Filters] onApply ->', payload);
+    onApply(payload);
   };
 
   const limpar = () => {
     setMinCarta(''); setMaxCarta('');
     setAdminKey(''); setProductKey('');
     setTipoKey(''); setLanceMin(''); setPrazo('');
-    onApply({}); // zera na página também
+    onApply({});
   };
 
   return (
@@ -95,7 +96,11 @@ export default function Filters({ data, onApply }){
 
       <div>
         <label className="block text-xs text-gray-600 mb-1">Administradora</label>
-        <select value={adminKey} onChange={e=>{ setAdminKey(e.target.value); setProductKey(''); }} className="w-full border rounded-2xl px-3 py-2">
+        <select
+          value={adminKey}
+          onChange={e=>{ setAdminKey(e.target.value); setProductKey(''); }}
+          className="w-full border rounded-2xl px-3 py-2"
+        >
           <option value="">Todas</option>
           {adminOptions.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
         </select>
@@ -103,7 +108,11 @@ export default function Filters({ data, onApply }){
 
       <div>
         <label className="block text-xs text-gray-600 mb-1">Produto</label>
-        <select value={productKey} onChange={e=>setProductKey(e.target.value)} className="w-full border rounded-2xl px-3 py-2">
+        <select
+          value={productKey}
+          onChange={e=>setProductKey(e.target.value)}
+          className="w-full border rounded-2xl px-3 py-2"
+        >
           <option value="">Todos</option>
           {productOptions.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
         </select>
