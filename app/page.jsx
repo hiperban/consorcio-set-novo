@@ -45,12 +45,13 @@ export default function Home() {
   const [filters, setFilters] = useState({});
   const [compare, setCompare] = useState([]);
 
-  // carrega mapa opcional de produtos
+  // carrega mapa opcional de produtos (agrupamentos/sinônimos/labels)
   const [prodMap, setProdMap] = useState({ map:{}, labels:{} });
   useEffect(() => {
     (async () => {
       try {
-        const j = await fetch('/data/_product-map.json', { cache:'no-store' }).then(r => r.ok ? r.json() : {map:{},labels:{}});
+        const j = await fetch('/data/_product-map.json', { cache:'no-store' })
+          .then(r => r.ok ? r.json() : {map:{},labels:{}});
         const map = {};
         Object.entries(j.map || {}).forEach(([raw, key]) => { map[N(raw)] = String(key); });
         setProdMap({ map, labels: j.labels || {} });
@@ -90,7 +91,7 @@ export default function Home() {
 
   /* ---------- aplica filtros ---------- */
   const filtered = useMemo(() => {
-    const { minCarta, maxCarta, admKey, produtoKey, tipoGrupo, lanceMin, prazo } = filters || {};
+    const { minCarta, maxCarta, admKey, produtoKey, tipoKey, lanceMin, prazo } = filters || {};
     return (data.grupos || []).filter(g => {
       const okMin   = minCarta == null ? true : Number(g?.valorCarta ?? 0)  >= Number(minCarta);
       const okMax   = maxCarta == null ? true : Number(g?.valorCarta ?? 0)  <= Number(maxCarta);
@@ -99,7 +100,7 @@ export default function Home() {
       const okAdm   = !admKey ? true : gAdmKey === String(admKey);
 
       const okProd  = !produtoKey ? true : productKey(g?.produto) === String(produtoKey);
-      const okTipo  = !tipoGrupo  ? true : N(g?.tipoGrupo)        === String(tipoGrupo);
+      const okTipo  = !tipoKey    ? true : N(g?.tipoGrupo)        === String(tipoKey);
       const okLance = lanceMin == null ? true : Number(g?.lanceMedio ?? 0) >= Number(lanceMin);
       const okPrazo = prazo == null    ? true : Number(g?.prazo ?? 0)      === Number(prazo);
 
@@ -131,7 +132,7 @@ export default function Home() {
 
       <Filters data={data} onFilterChange={setFilters} />
 
-      <div className="grid gap-6 [grid-template-columns:repeat(auto-fit,minmax(404px,1fr))]">
+      <div className="grid gap-6 [grid-template-columns:repeat(auto-fit,minmax(360px,1fr))]">
         {filtered.map(g => (
           <GroupCard key={g.id} group={g} onCompareToggle={onCompareToggle} />
         ))}
