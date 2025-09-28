@@ -1,35 +1,22 @@
-'use client';
-export const dynamic = 'force-dynamic';
+// DENTRO de page.jsx do /compare, substitua o Table por este mais robusto (opcional)
+function fmtBRL(v){ const n = Number(v ?? 0); return isFinite(n) ? n.toLocaleString('pt-BR',{style:'currency',currency:'BRL'}) : '—'; }
+function fmtNum(v){ const n = Number(v ?? 0); return isFinite(n) ? n.toLocaleString('pt-BR') : '—'; }
 
-import { Suspense, useEffect, useMemo, useState } from 'react';
-
-/** Junta vários datasets do /public/data */
-function mergeDatasets(list) {
-  const admMap = new Map();
-  const grupos = [];
-  for (const d of list) {
-    (d?.administradoras || []).forEach(a => { if (!admMap.has(a.id)) admMap.set(a.id, a); });
-    (d?.grupos || []).forEach(g => grupos.push(g));
-  }
-  return { administradoras: Array.from(admMap.values()), grupos };
-}
-
-function Table({ selected, all }) {
+function Table({ selected }) {
   const rows = [
-    ['Grupo', g => g.numeroGrupo],
-    ['Administradora', g => g.nomeAdministradora],
-    ['Produto', g => g.produto],
-    ['Tipo de Grupo', g => g.tipoGrupo],
-    ['Valor Carta', g => (g.valorCarta ?? 0).toLocaleString('pt-BR', { style:'currency', currency:'BRL' })],
-    ['Parcela', g => (g.valorParcela ?? 0).toLocaleString('pt-BR', { style:'currency', currency:'BRL' })],
-    ['Taxa Adm', g => `${g.taxaAdm}%`],
-    ['% Lance Médio', g => `${g.lanceMedio}%`],
-    ['% Lance Embutido', g => `${g.lanceEmbutidoPermite}%`],
-    ['Participantes', g => g.totalParticipantes],
-    ['Prazo (meses)', g => g.prazo],
-    ['Assembleia (dia)', g => g.diaAssembleia],
+    ['Grupo', g => g.numeroGrupo ?? '—'],
+    ['Administradora', g => g.nomeAdministradora ?? g.administradoraId ?? '—'],
+    ['Produto', g => g.produto ?? '—'],
+    ['Tipo de Grupo', g => g.tipoGrupo ?? '—'],
+    ['Valor Carta', g => fmtBRL(g.valorCarta)],
+    ['Parcela', g => fmtBRL(g.valorParcela)],
+    ['Taxa Adm', g => g.taxaAdm != null ? `${g.taxaAdm}%` : '—'],
+    ['% Lance Médio', g => g.lanceMedio != null ? `${g.lanceMedio}%` : '—'],
+    ['% Lance Embutido', g => g.lanceEmbutidoPermite != null ? `${g.lanceEmbutidoPermite}%` : '—'],
+    ['Participantes', g => fmtNum(g.totalParticipantes)],
+    ['Prazo (meses)', g => fmtNum(g.prazo)],
+    ['Assembleia (dia)', g => fmtNum(g.diaAssembleia)],
   ];
-
   return (
     <div className="card overflow-auto">
       <table className="min-w-full text-sm">
@@ -37,7 +24,9 @@ function Table({ selected, all }) {
           <tr>
             <th className="text-left p-3 w-48">Campo</th>
             {selected.map(g => (
-              <th key={g.id} className="text-left p-3">{g.nomeAdministradora} #{g.numeroGrupo}</th>
+              <th key={g.id} className="text-left p-3">
+                {(g.nomeAdministradora ?? g.administradoraId ?? '—')} #{g.numeroGrupo ?? '—'}
+              </th>
             ))}
           </tr>
         </thead>
@@ -53,50 +42,5 @@ function Table({ selected, all }) {
         </tbody>
       </table>
     </div>
-  );
-}
-
-export default function ComparePage() {
-  const [data, setData] = useState({ administradoras: [], grupos: [] });
-  const [selectedIds, setSelectedIds] = useState([]);
-
-  useEffect(() => {
-    async function loadAll() {
-      try {
-        const man = await fetch('/data/_manifest.json', { cache: 'no-store' }).then(r => r.json());
-        const files = Array.isArray(man.datasets) ? man.datasets : [];
-        const datasets = await Promise.all(
-          files.map(f => fetch(`/data/${f}`, { cache: 'no-store' }).then(r => r.json()))
-        );
-        setData(mergeDatasets(datasets));
-      } catch {
-        setData({ administradoras: [], grupos: [] });
-      }
-    }
-    loadAll();
-
-    // tentar recuperar seleção do localStorage
-    try {
-      const raw = localStorage.getItem('compareSelection');
-      if (raw) setSelectedIds(JSON.parse(raw));
-    } catch {}
-  }, []);
-
-  const selected = useMemo(() => {
-    const set = new Set(selectedIds);
-    return (data.grupos || []).filter(g => set.has(g.id)).slice(0, 4); // até 4 itens
-  }, [data, selectedIds]);
-
-  return (
-    <main className="container py-6 space-y-6">
-      <header>
-        <h1 className="text-2xl font-semibold text-brand-800">Comparar Grupos</h1>
-        <p className="text-sm text-gray-600">Tabela lado a lado com até 4 grupos.</p>
-      </header>
-
-      <Suspense>
-        <Table selected={selected} all={data.grupos||[]} />
-      </Suspense>
-    </main>
   );
 }
