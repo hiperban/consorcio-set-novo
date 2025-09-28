@@ -5,7 +5,7 @@ import { useEffect, useMemo, useState } from 'react';
 import Filters from '@/components/Filters';
 import GroupCard from '@/components/GroupCard';
 
-/* Helpers robustos */
+/* Helpers */
 function N(v){
   return String(v ?? '')
     .normalize('NFD')
@@ -57,8 +57,6 @@ function adminNameForGroup(g, admById) {
 
 export default function Home() {
   const [raw, setRaw] = useState({ administradoras: [], grupos: [] });
-
-  // filtros CANÔNICOS vindos do Filters (já são chaves)
   const [flt, setFlt] = useState({
     minCarta: undefined,
     maxCarta: undefined,
@@ -82,7 +80,7 @@ export default function Home() {
     return m;
   }, [raw]);
 
-  // PREPROCESS: gera campos __* e nome amigável
+  // PREPROCESS: adiciona campos __*
   const data = useMemo(() => {
     const grupos = (raw.grupos || []).map(g => {
       const adminName = adminNameForGroup(g, admById);
@@ -101,8 +99,9 @@ export default function Home() {
     return { administradoras: raw.administradoras, grupos };
   }, [raw, admById]);
 
-  // Recebe diretamente as CHAVES canônicas do Filters
+  // Recebe filtros já como CHAVES
   function handleApplyFromUI(ui){
+    console.debug('[page] apply filters <-', ui);
     setFlt({
       minCarta: ui.minCarta ?? undefined,
       maxCarta: ui.maxCarta ?? undefined,
@@ -114,26 +113,34 @@ export default function Home() {
     });
   }
 
-  // Filtro AND estrito (chave com chave)
   const filtered = useMemo(() => {
     const { minCarta, maxCarta, adminKey, productKey, tipoKey, lanceMin, prazo } = flt;
-    return (data.grupos || []).filter(g => {
-      if (minCarta != null && !(g.__valorCarta >= Number(minCarta))) return false;
-      if (maxCarta != null && !(g.__valorCarta <= Number(maxCarta))) return false;
+    const out = (data.grupos || []).filter(g => {
+      if (minCarta != null && Number.isFinite(minCarta) && !(g.__valorCarta >= Number(minCarta))) return false;
+      if (maxCarta != null && Number.isFinite(maxCarta) && !(g.__valorCarta <= Number(maxCarta))) return false;
       if (adminKey   && g.__adminKey   !== adminKey)   return false;
       if (productKey && g.__productKey !== productKey) return false;
       if (tipoKey    && g.__tipoKey    !== tipoKey)    return false;
-      if (lanceMin != null && !(g.__lanceMedio >= Number(lanceMin))) return false;
-      if (prazo    != null && !(g.__prazo === Number(prazo))) return false;
+      if (lanceMin != null && Number.isFinite(lanceMin) && !(g.__lanceMedio >= Number(lanceMin))) return false;
+      if (prazo    != null && Number.isFinite(prazo)    && !(g.__prazo === Number(prazo))) return false;
       return true;
     });
+    console.debug('[page] filtered', {
+      total: data.grupos?.length || 0,
+      after: out.length,
+      keys: { adminKey, productKey, tipoKey, minCarta, maxCarta, lanceMin, prazo },
+      sample: out.slice(0,3).map(g=>({__adminKey:g.__adminKey,__productKey:g.__productKey,numero:g.numeroGrupo}))
+    });
+    return out;
   }, [data, flt]);
 
   return (
     <main className="container py-6 space-y-6">
       <header>
         <h1 className="text-2xl font-semibold text-brand-800">Simulador de Consórcio</h1>
-        <p className="text-sm text-gray-600">Filtros determinísticos (chaves canônicas).</p>
+        <p className="text-xs text-gray-500">
+          <strong>Debug:</strong> adminKey=<code>{flt.adminKey||'-'}</code> · productKey=<code>{flt.productKey||'-'}</code> · tipoKey=<code>{flt.tipoKey||'-'}</code>
+        </p>
       </header>
 
       <Filters data={data} onApply={handleApplyFromUI} />
