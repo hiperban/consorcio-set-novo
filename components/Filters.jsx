@@ -2,7 +2,7 @@
 import { useEffect, useMemo, useState } from 'react';
 
 /* Normalização compatível */
-function normalize(v){
+function N(v){
   return String(v ?? '')
     .normalize('NFD')
     .replace(/[\u0300-\u036f]/g, '')
@@ -10,7 +10,26 @@ function normalize(v){
     .toUpperCase();
 }
 
-/* Helpers de máscara BRL */
+/* Canonização de Produto */
+function productKey(v) {
+  const t = N(v);
+  if (['AUTOMOVEL','VEICULO','VEICULOS','CARRO','CARROS','VEICULAR'].includes(t)) return 'AUTOMOVEL';
+  if (['SERVICO','SERVICOS','SERVIÇO','SERVIÇOS','SERV'].includes(t)) return 'SERVICOS';
+  if (['MOTO','MOTOCICLETA','MOTOS'].includes(t)) return 'MOTO';
+  if (['IMOVEL','IMOVEIS','IMÓVEL','IMÓVEIS','IMOBILIARIO','IMOBILIÁRIO'].includes(t)) return 'IMOVEL';
+  if (['CAMINHAO','CAMINHAOES','CAMINHÃO','CAMINHÕES','PESADOS','CAMINHAO/PESADOS'].includes(t)) return 'CAMINHAO';
+  return 'OUTROS BENS';
+}
+const PRODUCT_LABEL = {
+  AUTOMOVEL: 'Automóvel',
+  SERVICOS: 'Serviços',
+  MOTO: 'Moto',
+  IMOVEL: 'Imóvel',
+  CAMINHAO: 'Caminhão',
+  'OUTROS BENS': 'Outros Bens',
+};
+
+/* Máscara BRL */
 function maskBRL(input) {
   const digits = String(input || '').replace(/\D/g, '');
   if (!digits) return '';
@@ -24,34 +43,43 @@ function parseBRLToNumber(masked) {
 }
 
 export default function Filters({ data, onFilterChange }){
-  // Inputs de valor com máscara
   const [minCartaMasked, setMinCartaMasked] = useState('');
   const [maxCartaMasked, setMaxCartaMasked] = useState('');
 
-  // Estados dos filtros
-  const [admId, setAdmId] = useState('');     // <- agora guarda administradoraId
+  // Agora guardamos a ADMIN pelo "nome canônico" (não por ID)
+  const [admKey, setAdmKey] = useState('');
   const [lanceMin, setLanceMin] = useState('');
-  const [produto, setProduto] = useState(''); // envia normalizado
-  const [tipoGrupo, setTipoGrupo] = useState(''); // envia normalizado
+  const [produto, setProduto] = useState('');     // chave canônica
+  const [tipoGrupo, setTipoGrupo] = useState(''); // normalizado
   const [prazo, setPrazo] = useState('');
 
-  /* Opções: Administradora usa ID estável; label é o nome original */
+  /* Opções de Administradora por NOME (canônico) */
   const administradoras = useMemo(() => {
-    const list = Array.isArray(data?.administradoras) ? data.administradoras : [];
-    // filtra registros válidos e ordena por nome
-    return list
-      .filter(a => a && a.id && a.nome)
-      .sort((a,b)=> String(a.nome).localeCompare(String(b.nome), 'pt-BR'));
+    // Pega nomes tanto de data.administradoras quanto dos grupos (nomeAdministradora)
+    const map = new Map();
+    (data?.administradoras || []).forEach(a => {
+      const label = a?.nome ?? '';
+      const key = N(label);
+      if (key && !map.has(key)) map.set(key, label);
+    });
+    (data?.grupos || []).forEach(g => {
+      const label = g?.nomeAdministradora ?? '';
+      const key = N(label);
+      if (key && !map.has(key)) map.set(key, label);
+    });
+    // transforma em array [{key,label}] e ordena por label
+    return Array.from(map.entries())
+      .map(([key, label]) => ({ key, label }))
+      .sort((x,y)=> String(x.label).localeCompare(String(y.label), 'pt-BR'));
   }, [data]);
 
+  /* Opções de Produto (canonizadas) */
   const produtos = useMemo(() => {
-    const map = new Map();
-    (data?.grupos || []).forEach(g => {
-      const label = String(g?.produto ?? '').trim();
-      const value = normalize(label);
-      if (value && !map.has(value)) map.set(value, { label, value });
-    });
-    return Array.from(map.values()).sort((x,y)=>x.label.localeCompare(y.label,'pt-BR'));
+    const set = new Set();
+    (data?.grupos || []).forEach(g => set.add(productKey(g?.produto)));
+    return Array.from(set)
+      .map(k => ({ value: k, label: PRODUCT_LABEL[k] ?? k }))
+      .sort((a,b)=> a.label.localeCompare(b.label, 'pt-BR'));
   }, [data]);
 
   useEffect(()=>{
@@ -63,15 +91,15 @@ export default function Filters({ data, onFilterChange }){
     onFilterChange({
       minCarta: Number.isNaN(min) ? undefined : min,
       maxCarta: Number.isNaN(max) ? undefined : max,
-      admId: admId || '',                 // <- envia administradoraId
-      produto: produto || '',             // normalizado
-      tipoGrupo: tipoGrupo || '',         // normalizado
+      admKey: admKey || '',                 // ← nome canônico da administradora
+      produto: produto || '',               // chave canônica
+      tipoGrupo: N(tipoGrupo || ''),        // normalizado
       lanceMin: Number.isNaN(lance) ? undefined : lance,
       prazo: Number.isNaN(prazoNum) ? undefined : prazoNum
     });
-  }, [minCartaMasked, maxCartaMasked, admId, lanceMin, produto, tipoGrupo, prazo, onFilterChange]);
+  }, [minCartaMasked, maxCartaMasked, admKey, lanceMin, produto, tipoGrupo, prazo, onFilterChange]);
 
-  const onAdmChange = (value) => { setAdmId(value); setProduto(''); setTipoGrupo(''); };
+  const onAdmChange = (value) => { setAdmKey(value); setProduto(''); setTipoGrupo(''); };
 
   return (
     <div className="card grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3">
@@ -100,9 +128,9 @@ export default function Filters({ data, onFilterChange }){
 
       <div>
         <label className="block text-xs text-gray-600 mb-1">Administradora</label>
-        <select value={admId} onChange={e=>onAdmChange(e.target.value)} className="w-full border rounded-2xl px-3 py-2">
+        <select value={admKey} onChange={e=>onAdmChange(e.target.value)} className="w-full border rounded-2xl px-3 py-2">
           <option value="">Todas</option>
-          {administradoras.map(a => (<option key={a.id} value={a.id}>{a.nome}</option>))}
+          {administradoras.map(opt => (<option key={opt.key} value={opt.key}>{opt.label}</option>))}
         </select>
       </div>
 
@@ -133,8 +161,8 @@ export default function Filters({ data, onFilterChange }){
           className="w-full border rounded-2xl px-3 py-2"
         >
           <option value="">Todos</option>
-          <option value={normalize('PARCELA REDUZIDA')}>PARCELA REDUZIDA</option>
-          <option value={normalize('PARCELA INTEGRAL')}>PARCELA INTEGRAL</option>
+          <option value={N('PARCELA REDUZIDA')}>PARCELA REDUZIDA</option>
+          <option value={N('PARCELA INTEGRAL')}>PARCELA INTEGRAL</option>
         </select>
       </div>
 
