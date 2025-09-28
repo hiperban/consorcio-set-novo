@@ -1,7 +1,7 @@
 'use client';
 import { useEffect, useMemo, useState } from 'react';
 
-/* Normalização compatível */
+/* ------------ Normalização & helpers ------------ */
 function N(v){
   return String(v ?? '')
     .normalize('NFD')
@@ -9,27 +9,19 @@ function N(v){
     .trim()
     .toUpperCase();
 }
-
-/* Canonização de Produto */
-function productKey(v) {
-  const t = N(v);
-  if (['AUTOMOVEL','VEICULO','VEICULOS','CARRO','CARROS','VEICULAR'].includes(t)) return 'AUTOMOVEL';
-  if (['SERVICO','SERVICOS','SERVIÇO','SERVIÇOS','SERV'].includes(t)) return 'SERVICOS';
-  if (['MOTO','MOTOCICLETA','MOTOS'].includes(t)) return 'MOTO';
-  if (['IMOVEL','IMOVEIS','IMÓVEL','IMÓVEIS','IMOBILIARIO','IMOBILIÁRIO'].includes(t)) return 'IMOVEL';
-  if (['CAMINHAO','CAMINHAOES','CAMINHÃO','CAMINHÕES','PESADOS','CAMINHAO/PESADOS'].includes(t)) return 'CAMINHAO';
-  return 'OUTROS BENS';
+function toTitle(s){
+  return String(s || '')
+    .toLowerCase()
+    .replace(/(^|[\s_-])([a-zà-ú])/g, (_,p,c)=> p + c.toUpperCase());
 }
-const PRODUCT_LABEL = {
-  AUTOMOVEL: 'Automóvel',
-  SERVICOS: 'Serviços',
-  MOTO: 'Moto',
-  IMOVEL: 'Imóvel',
-  CAMINHAO: 'Caminhão',
-  'OUTROS BENS': 'Outros Bens',
-};
+function slugKey(v){
+  // transforma qualquer texto em CHAVE_ESTAVEL
+  const t = N(v);
+  const k = t.replace(/[^A-Z0-9]+/g,'_').replace(/^_|_$/g,'');
+  return k || 'OUTROS_BENS';
+}
 
-/* Máscara BRL */
+/* ------------ Máscara BRL ------------ */
 function maskBRL(input) {
   const digits = String(input || '').replace(/\D/g, '');
   if (!digits) return '';
@@ -43,19 +35,43 @@ function parseBRLToNumber(masked) {
 }
 
 export default function Filters({ data, onFilterChange }){
+  // ------- carrega taxonomia opcional de produtos -------
+  const [prodMap, setProdMap] = useState({ map:{}, labels:{} });
+  useEffect(() => {
+    (async () => {
+      try {
+        const j = await fetch('/data/_product-map.json', { cache:'no-store' }).then(r => r.ok ? r.json() : {map:{},labels:{}});
+        // normaliza chaves do mapa
+        const map = {};
+        Object.entries(j.map || {}).forEach(([raw, key]) => { map[N(raw)] = String(key); });
+        setProdMap({ map, labels: j.labels || {} });
+      } catch { setProdMap({ map:{}, labels:{} }); }
+    })();
+  }, []);
+
+  // Inputs mascarados
   const [minCartaMasked, setMinCartaMasked] = useState('');
   const [maxCartaMasked, setMaxCartaMasked] = useState('');
 
-  // Agora guardamos a ADMIN pelo "nome canônico" (não por ID)
-  const [admKey, setAdmKey] = useState('');
+  // Filtros
+  const [admKey, setAdmKey] = useState('');    // administradora por NOME canônico
   const [lanceMin, setLanceMin] = useState('');
-  const [produto, setProduto] = useState('');     // chave canônica
-  const [tipoGrupo, setTipoGrupo] = useState(''); // normalizado
+  const [produtoKey, setProdutoKey] = useState(''); // CHAVE canônica dinâmica
+  const [tipoGrupo, setTipoGrupo] = useState('');
   const [prazo, setPrazo] = useState('');
+
+  // --------- Funções de canonização de produto ----------
+  const productKey = (label) => {
+    const norm = N(label);
+    const mapped = prodMap.map[norm];    // se tiver sinônimo no json, usa
+    return mapped || slugKey(norm);      // senão vira uma chave automática
+  };
+  const productLabelForKey = (key, exampleLabel) => {
+    return prodMap.labels?.[key] || toTitle((exampleLabel || key).replace(/_/g,' '));
+  };
 
   /* Opções de Administradora por NOME (canônico) */
   const administradoras = useMemo(() => {
-    // Pega nomes tanto de data.administradoras quanto dos grupos (nomeAdministradora)
     const map = new Map();
     (data?.administradoras || []).forEach(a => {
       const label = a?.nome ?? '';
@@ -67,21 +83,24 @@ export default function Filters({ data, onFilterChange }){
       const key = N(label);
       if (key && !map.has(key)) map.set(key, label);
     });
-    // transforma em array [{key,label}] e ordena por label
     return Array.from(map.entries())
       .map(([key, label]) => ({ key, label }))
       .sort((x,y)=> String(x.label).localeCompare(String(y.label), 'pt-BR'));
   }, [data]);
 
-  /* Opções de Produto (canonizadas) */
+  /* Opções de Produto (100% dinâmicas) */
   const produtos = useMemo(() => {
-    const set = new Set();
-    (data?.grupos || []).forEach(g => set.add(productKey(g?.produto)));
-    return Array.from(set)
-      .map(k => ({ value: k, label: PRODUCT_LABEL[k] ?? k }))
+    const m = new Map(); // key -> label bonito
+    (data?.grupos || []).forEach(g => {
+      const key = productKey(g?.produto);
+      if (!m.has(key)) m.set(key, productLabelForKey(key, g?.produto));
+    });
+    return Array.from(m.entries())
+      .map(([value, label]) => ({ value, label }))
       .sort((a,b)=> a.label.localeCompare(b.label, 'pt-BR'));
-  }, [data]);
+  }, [data, prodMap]);
 
+  // envia filtros para a página
   useEffect(()=>{
     const min   = parseBRLToNumber(minCartaMasked);
     const max   = parseBRLToNumber(maxCartaMasked);
@@ -91,37 +110,31 @@ export default function Filters({ data, onFilterChange }){
     onFilterChange({
       minCarta: Number.isNaN(min) ? undefined : min,
       maxCarta: Number.isNaN(max) ? undefined : max,
-      admKey: admKey || '',                 // ← nome canônico da administradora
-      produto: produto || '',               // chave canônica
-      tipoGrupo: N(tipoGrupo || ''),        // normalizado
+      admKey: admKey || '',
+      produtoKey: produtoKey || '',
+      tipoGrupo: N(tipoGrupo || ''),
       lanceMin: Number.isNaN(lance) ? undefined : lance,
       prazo: Number.isNaN(prazoNum) ? undefined : prazoNum
     });
-  }, [minCartaMasked, maxCartaMasked, admKey, lanceMin, produto, tipoGrupo, prazo, onFilterChange]);
+  }, [minCartaMasked, maxCartaMasked, admKey, lanceMin, produtoKey, tipoGrupo, prazo, onFilterChange]);
 
-  const onAdmChange = (value) => { setAdmKey(value); setProduto(''); setTipoGrupo(''); };
+  const onAdmChange = (value) => { setAdmKey(value); setProdutoKey(''); setTipoGrupo(''); };
 
   return (
     <div className="card grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3">
       <div>
         <label className="block text-xs text-gray-600 mb-1">Valor Carta Mín (R$)</label>
         <input
-          type="text"
-          inputMode="numeric"
-          placeholder="R$ 0,00"
-          value={minCartaMasked}
-          onChange={(e)=> setMinCartaMasked(maskBRL(e.target.value))}
+          type="text" inputMode="numeric" placeholder="R$ 0,00"
+          value={minCartaMasked} onChange={(e)=> setMinCartaMasked(maskBRL(e.target.value))}
           className="w-full border rounded-2xl px-3 py-2"
         />
       </div>
       <div>
         <label className="block text-xs text-gray-600 mb-1">Valor Carta Máx (R$)</label>
         <input
-          type="text"
-          inputMode="numeric"
-          placeholder="R$ 0,00"
-          value={maxCartaMasked}
-          onChange={(e)=> setMaxCartaMasked(maskBRL(e.target.value))}
+          type="text" inputMode="numeric" placeholder="R$ 0,00"
+          value={maxCartaMasked} onChange={(e)=> setMaxCartaMasked(maskBRL(e.target.value))}
           className="w-full border rounded-2xl px-3 py-2"
         />
       </div>
@@ -137,17 +150,15 @@ export default function Filters({ data, onFilterChange }){
       <div>
         <label className="block text-xs text-gray-600 mb-1">% Lance Mínimo</label>
         <input
-          value={lanceMin}
-          onChange={e=>setLanceMin(e.target.value)}
-          inputMode="numeric"
-          placeholder="ex.: 20"
+          value={lanceMin} onChange={e=>setLanceMin(e.target.value)}
+          inputMode="numeric" placeholder="ex.: 20"
           className="w-full border rounded-2xl px-3 py-2"
         />
       </div>
 
       <div>
         <label className="block text-xs text-gray-600 mb-1">Produto</label>
-        <select value={produto} onChange={e=>setProduto(e.target.value)} className="w-full border rounded-2xl px-3 py-2">
+        <select value={produtoKey} onChange={e=>setProdutoKey(e.target.value)} className="w-full border rounded-2xl px-3 py-2">
           <option value="">Todos</option>
           {produtos.map(opt => (<option key={opt.value} value={opt.value}>{opt.label}</option>))}
         </select>
@@ -155,11 +166,7 @@ export default function Filters({ data, onFilterChange }){
 
       <div>
         <label className="block text-xs text-gray-600 mb-1">Tipo de Grupo</label>
-        <select
-          value={tipoGrupo}
-          onChange={e=>setTipoGrupo(e.target.value)}
-          className="w-full border rounded-2xl px-3 py-2"
-        >
+        <select value={tipoGrupo} onChange={e=>setTipoGrupo(e.target.value)} className="w-full border rounded-2xl px-3 py-2">
           <option value="">Todos</option>
           <option value={N('PARCELA REDUZIDA')}>PARCELA REDUZIDA</option>
           <option value={N('PARCELA INTEGRAL')}>PARCELA INTEGRAL</option>
@@ -169,10 +176,8 @@ export default function Filters({ data, onFilterChange }){
       <div>
         <label className="block text-xs text-gray-600 mb-1">Prazo (meses)</label>
         <input
-          value={prazo}
-          onChange={e=>setPrazo(e.target.value)}
-          inputMode="numeric"
-          className="w-full border rounded-2xl px-3 py-2"
+          value={prazo} onChange={e=>setPrazo(e.target.value)}
+          inputMode="numeric" className="w-full border rounded-2xl px-3 py-2"
         />
       </div>
     </div>
