@@ -15,7 +15,6 @@ function toTitle(s){
     .replace(/(^|[\s_-])([a-zà-ú])/g, (_,p,c)=> p + c.toUpperCase());
 }
 function slugKey(v){
-  // transforma qualquer texto em CHAVE_ESTAVEL
   const t = N(v);
   const k = t.replace(/[^A-Z0-9]+/g,'_').replace(/^_|_$/g,'');
   return k || 'OUTROS_BENS';
@@ -40,8 +39,8 @@ export default function Filters({ data, onFilterChange }){
   useEffect(() => {
     (async () => {
       try {
-        const j = await fetch('/data/_product-map.json', { cache:'no-store' }).then(r => r.ok ? r.json() : {map:{},labels:{}});
-        // normaliza chaves do mapa
+        const j = await fetch('/data/_product-map.json', { cache:'no-store' })
+          .then(r => r.ok ? r.json() : {map:{},labels:{}});
         const map = {};
         Object.entries(j.map || {}).forEach(([raw, key]) => { map[N(raw)] = String(key); });
         setProdMap({ map, labels: j.labels || {} });
@@ -54,13 +53,13 @@ export default function Filters({ data, onFilterChange }){
   const [maxCartaMasked, setMaxCartaMasked] = useState('');
 
   // Filtros
-  const [admKey, setAdmKey] = useState('');    // administradora por NOME canônico
+  const [admKey, setAdmKey] = useState('');        // administradora por NOME canônico
   const [lanceMin, setLanceMin] = useState('');
   const [produtoKey, setProdutoKey] = useState(''); // CHAVE canônica dinâmica
-  const [tipoGrupo, setTipoGrupo] = useState('');
+  const [tipoKey, setTipoKey] = useState('');       // normalizado
   const [prazo, setPrazo] = useState('');
 
-  // --------- Funções de canonização de produto ----------
+  // --------- Canonização de produto ----------
   const productKey = (label) => {
     const norm = N(label);
     const mapped = prodMap.map[norm];    // se tiver sinônimo no json, usa
@@ -100,6 +99,21 @@ export default function Filters({ data, onFilterChange }){
       .sort((a,b)=> a.label.localeCompare(b.label, 'pt-BR'));
   }, [data, prodMap]);
 
+  /* Opções de Tipo de Grupo (dinâmicas) */
+  const tipos = useMemo(() => {
+    const m = new Map();
+    (data?.grupos || []).forEach(g => {
+      const value = N(g?.tipoGrupo);
+      if (value) {
+        const label = toTitle(String(g?.tipoGrupo || value).replace(/_/g,' '));
+        if (!m.has(value)) m.set(value, label);
+      }
+    });
+    return Array.from(m.entries())
+      .map(([value, label]) => ({ value, label }))
+      .sort((a,b)=> a.label.localeCompare(b.label, 'pt-BR'));
+  }, [data]);
+
   // envia filtros para a página
   useEffect(()=>{
     const min   = parseBRLToNumber(minCartaMasked);
@@ -112,13 +126,13 @@ export default function Filters({ data, onFilterChange }){
       maxCarta: Number.isNaN(max) ? undefined : max,
       admKey: admKey || '',
       produtoKey: produtoKey || '',
-      tipoGrupo: N(tipoGrupo || ''),
+      tipoKey: tipoKey || '',
       lanceMin: Number.isNaN(lance) ? undefined : lance,
       prazo: Number.isNaN(prazoNum) ? undefined : prazoNum
     });
-  }, [minCartaMasked, maxCartaMasked, admKey, lanceMin, produtoKey, tipoGrupo, prazo, onFilterChange]);
+  }, [minCartaMasked, maxCartaMasked, admKey, lanceMin, produtoKey, tipoKey, prazo, onFilterChange]);
 
-  const onAdmChange = (value) => { setAdmKey(value); setProdutoKey(''); setTipoGrupo(''); };
+  const onAdmChange = (value) => { setAdmKey(value); setProdutoKey(''); setTipoKey(''); };
 
   return (
     <div className="card grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3">
@@ -166,10 +180,9 @@ export default function Filters({ data, onFilterChange }){
 
       <div>
         <label className="block text-xs text-gray-600 mb-1">Tipo de Grupo</label>
-        <select value={tipoGrupo} onChange={e=>setTipoGrupo(e.target.value)} className="w-full border rounded-2xl px-3 py-2">
+        <select value={tipoKey} onChange={e=>setTipoKey(e.target.value)} className="w-full border rounded-2xl px-3 py-2">
           <option value="">Todos</option>
-          <option value={N('PARCELA REDUZIDA')}>PARCELA REDUZIDA</option>
-          <option value={N('PARCELA INTEGRAL')}>PARCELA INTEGRAL</option>
+          {tipos.map(opt => (<option key={opt.value} value={opt.value}>{opt.label}</option>))}
         </select>
       </div>
 
