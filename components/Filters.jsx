@@ -1,6 +1,7 @@
 'use client';
 import { useEffect, useMemo, useState } from 'react';
 
+/* Normalização (trim + sem acento + MAIÚSC.) */
 function normalize(v){
   if (v === undefined || v === null) return '';
   return String(v).normalize('NFD').replace(/\p{Diacritic}/gu, '').trim().toUpperCase();
@@ -24,31 +25,47 @@ export default function Filters({ data, onFilterChange }){
   const [minCartaMasked, setMinCartaMasked] = useState('');
   const [maxCartaMasked, setMaxCartaMasked] = useState('');
 
+  // Estados dos selects armazenam o **valor normalizado**
   const [adm, setAdm] = useState('');
   const [lanceMin, setLanceMin] = useState('');
   const [produto, setProduto] = useState('');
   const [tipoGrupo, setTipoGrupo] = useState('');
   const [prazo, setPrazo] = useState('');
 
-  const administradoras = useMemo(() => (data?.administradoras || []).map(a => a.nome), [data]);
+  /* Opções: value = normalizado, label = original */
+  const administradoras = useMemo(() => {
+    const map = new Map();
+    (data?.administradoras || []).forEach(a => {
+      const label = a.nome ?? '';
+      const value = normalize(label);
+      if (value && !map.has(value)) map.set(value, { label, value });
+    });
+    return Array.from(map.values()).sort((x,y)=>x.label.localeCompare(y.label,'pt-BR'));
+  }, [data]);
+
   const produtos = useMemo(() => {
-    const set = new Set((data?.grupos||[]).map(g => normalize(g.produto)));
-    return Array.from(set).filter(Boolean);
+    const map = new Map();
+    (data?.grupos || []).forEach(g => {
+      const label = String(g.produto ?? '').trim();
+      const value = normalize(label);
+      if (value && !map.has(value)) map.set(value, { label, value });
+    });
+    return Array.from(map.values()).sort((x,y)=>x.label.localeCompare(y.label,'pt-BR'));
   }, [data]);
 
   useEffect(()=>{
-    const min = parseBRLToNumber(minCartaMasked);
-    const max = parseBRLToNumber(maxCartaMasked);
+    const min   = parseBRLToNumber(minCartaMasked);
+    const max   = parseBRLToNumber(maxCartaMasked);
     const lance = lanceMin === '' ? undefined : parseFloat(lanceMin);
     const prazoNum = prazo === '' ? undefined : parseInt(prazo, 10);
 
     onFilterChange({
       minCarta: Number.isNaN(min) ? undefined : min,
       maxCarta: Number.isNaN(max) ? undefined : max,
-      adm,
+      adm: adm || '',                 // já normalizado
+      produto: produto || '',         // já normalizado
+      tipoGrupo: tipoGrupo || '',     // já normalizado
       lanceMin: Number.isNaN(lance) ? undefined : lance,
-      produto,
-      tipoGrupo,
       prazo: Number.isNaN(prazoNum) ? undefined : prazoNum
     });
   }, [minCartaMasked, maxCartaMasked, adm, lanceMin, produto, tipoGrupo, prazo, onFilterChange]);
@@ -79,13 +96,15 @@ export default function Filters({ data, onFilterChange }){
           className="w-full border rounded-2xl px-3 py-2"
         />
       </div>
+
       <div>
         <label className="block text-xs text-gray-600 mb-1">Administradora</label>
         <select value={adm} onChange={e=>onAdmChange(e.target.value)} className="w-full border rounded-2xl px-3 py-2">
           <option value="">Todas</option>
-          {administradoras.map((n)=>(<option key={n} value={n}>{n}</option>))}
+          {administradoras.map((opt)=>(<option key={opt.value} value={opt.value}>{opt.label}</option>))}
         </select>
       </div>
+
       <div>
         <label className="block text-xs text-gray-600 mb-1">% Lance Mínimo</label>
         <input
@@ -96,21 +115,28 @@ export default function Filters({ data, onFilterChange }){
           className="w-full border rounded-2xl px-3 py-2"
         />
       </div>
+
       <div>
         <label className="block text-xs text-gray-600 mb-1">Produto</label>
         <select value={produto} onChange={e=>setProduto(e.target.value)} className="w-full border rounded-2xl px-3 py-2">
           <option value="">Todos</option>
-          {produtos.map(p => (<option key={p} value={p}>{p}</option>))}
+          {produtos.map(opt => (<option key={opt.value} value={opt.value}>{opt.label}</option>))}
         </select>
       </div>
+
       <div>
         <label className="block text-xs text-gray-600 mb-1">Tipo de Grupo</label>
-        <select value={tipoGrupo} onChange={e=>setTipoGrupo(e.target.value)} className="w-full border rounded-2xl px-3 py-2">
+        <select
+          value={tipoGrupo}
+          onChange={e=>setTipoGrupo(e.target.value)}
+          className="w-full border rounded-2xl px-3 py-2"
+        >
           <option value="">Todos</option>
-          <option value="PARCELA REDUZIDA">PARCELA REDUZIDA</option>
-          <option value="PARCELA INTEGRAL">PARCELA INTEGRAL</option>
+          <option value={normalize('PARCELA REDUZIDA')}>PARCELA REDUZIDA</option>
+          <option value={normalize('PARCELA INTEGRAL')}>PARCELA INTEGRAL</option>
         </select>
       </div>
+
       <div>
         <label className="block text-xs text-gray-600 mb-1">Prazo (meses)</label>
         <input
