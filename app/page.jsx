@@ -5,7 +5,7 @@ import { useEffect, useMemo, useState } from 'react';
 import Filters from '@/components/Filters';
 import GroupCard from '@/components/GroupCard';
 
-/* Helpers */
+/* Helpers robustos */
 function N(v){
   return String(v ?? '')
     .normalize('NFD')
@@ -37,12 +37,13 @@ function intLoose(v){
   return m ? parseInt(m[0],10) : NaN;
 }
 
+/* Carrega e junta datasets */
 async function loadAllDatasets() {
   const man = await fetch('/data/_manifest.json', { cache:'no-store' }).then(r=>r.json());
   const files = Array.isArray(man?.datasets) ? man.datasets : [];
   const datasets = await Promise.all(files.map(f => fetch(`/data/${f}`, { cache:'no-store' }).then(r=>r.json())));
   const grupos = [];
-  const admMap = new Map();
+  const admMap = new Map(); // id -> {id,nome}
   for (const d of datasets) {
     (d?.administradoras || []).forEach(a => { if (a?.id && !admMap.has(String(a.id))) admMap.set(String(a.id), a); });
     (d?.grupos || []).forEach(g => grupos.push(g));
@@ -56,6 +57,8 @@ function adminNameForGroup(g, admById) {
 
 export default function Home() {
   const [raw, setRaw] = useState({ administradoras: [], grupos: [] });
+
+  // filtros CANÔNICOS vindos do Filters (já são chaves)
   const [flt, setFlt] = useState({
     minCarta: undefined,
     maxCarta: undefined,
@@ -79,7 +82,7 @@ export default function Home() {
     return m;
   }, [raw]);
 
-  // PREPROCESS: gera campos __* e nome bonitinho para exibir
+  // PREPROCESS: gera campos __* e nome amigável
   const data = useMemo(() => {
     const grupos = (raw.grupos || []).map(g => {
       const adminName = adminNameForGroup(g, admById);
@@ -98,19 +101,20 @@ export default function Home() {
     return { administradoras: raw.administradoras, grupos };
   }, [raw, admById]);
 
-  // AGORA recebemos as CHAVES diretamente do Filters (sem reconverter)
+  // Recebe diretamente as CHAVES canônicas do Filters
   function handleApplyFromUI(ui){
     setFlt({
       minCarta: ui.minCarta ?? undefined,
       maxCarta: ui.maxCarta ?? undefined,
       adminKey: ui.adminKey || '',
       productKey: ui.productKey || '',
-      tipoKey: ui.tipo ? N(ui.tipo) : '',
+      tipoKey: ui.tipoKey || '',
       lanceMin: ui.lanceMin ?? undefined,
       prazo: ui.prazo ?? undefined,
     });
   }
 
+  // Filtro AND estrito (chave com chave)
   const filtered = useMemo(() => {
     const { minCarta, maxCarta, adminKey, productKey, tipoKey, lanceMin, prazo } = flt;
     return (data.grupos || []).filter(g => {
@@ -129,7 +133,7 @@ export default function Home() {
     <main className="container py-6 space-y-6">
       <header>
         <h1 className="text-2xl font-semibold text-brand-800">Simulador de Consórcio</h1>
-        <p className="text-sm text-gray-600">Filtros determinísticos (com chaves canônicas).</p>
+        <p className="text-sm text-gray-600">Filtros determinísticos (chaves canônicas).</p>
       </header>
 
       <Filters data={data} onApply={handleApplyFromUI} />
