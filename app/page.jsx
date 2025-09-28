@@ -5,7 +5,16 @@ import { useEffect, useMemo, useState } from 'react';
 import Filters from '@/components/Filters';
 import GroupCard from '@/components/GroupCard';
 
-/** Junta vários datasets do /public/data */
+/* Normaliza texto p/ comparação */
+function N(v) {
+  return String(v ?? '')
+    .normalize('NFD')
+    .replace(/\p{Diacritic}/gu, '')
+    .trim()
+    .toUpperCase();
+}
+
+/* Junta vários datasets do /public/data */
 function mergeDatasets(list) {
   const admMap = new Map(); // id -> {id,nome}
   const grupos = [];
@@ -38,21 +47,18 @@ export default function Home() {
     loadAll();
   }, []);
 
-  // aplica filtros básicos (mesma lógica que você já tinha)
+  /* Filtro com comparação normalizada */
   const filtered = useMemo(() => {
-    const {
-      minCarta, maxCarta, adm, lanceMin, produto, tipoGrupo, prazo
-    } = filters || {};
+    const { minCarta, maxCarta, adm, lanceMin, produto, tipoGrupo, prazo } = filters || {};
     return (data.grupos || []).filter(g => {
-      const okMin = minCarta == null ? true : g.valorCarta >= minCarta;
-      const okMax = maxCarta == null ? true : g.valorCarta <= maxCarta;
-      const okAdm = !adm ? true : (g.nomeAdministradora || '').toUpperCase() === String(adm).toUpperCase();
-      const okLance = lanceMin == null ? true : (Number(g.lanceMedio) >= Number(lanceMin));
-      const okProd = !produto ? true : String(g.produto).normalize('NFD').replace(/\p{Diacritic}/gu,'').toUpperCase()
-                               === String(produto).normalize('NFD').replace(/\p{Diacritic}/gu,'').toUpperCase();
-      const okTipo = !tipoGrupo ? true : String(g.tipoGrupo).toUpperCase() === String(tipoGrupo).toUpperCase();
-      const okPrazo = prazo == null ? true : Number(g.prazo) === Number(prazo);
-      return okMin && okMax && okAdm && okLance && okProd && okTipo && okPrazo;
+      const okMin   = minCarta == null ? true : Number(g.valorCarta)  >= Number(minCarta);
+      const okMax   = maxCarta == null ? true : Number(g.valorCarta)  <= Number(maxCarta);
+      const okAdm   = !adm       ? true : N(g.nomeAdministradora)     === String(adm);             // adm já vem normalizado
+      const okProd  = !produto   ? true : N(g.produto)                === String(produto);         // produto normalizado
+      const okTipo  = !tipoGrupo ? true : N(g.tipoGrupo)              === String(tipoGrupo);       // tipo normalizado
+      const okLance = lanceMin == null ? true : Number(g.lanceMedio)  >= Number(lanceMin);
+      const okPrazo = prazo == null ? true : Number(g.prazo)          === Number(prazo);
+      return okMin && okMax && okAdm && okProd && okTipo && okLance && okPrazo;
     });
   }, [data, filters]);
 
@@ -66,7 +72,6 @@ export default function Home() {
         return prev.filter(x => x.id !== group.id);
       }
     });
-    // salva no localStorage (usado no compare)
     try {
       const ids = (checked ? [...compare, group] : compare.filter(x => x.id !== group.id)).map(x => x.id);
       localStorage.setItem('compareSelection', JSON.stringify(ids));
@@ -82,7 +87,7 @@ export default function Home() {
 
       <Filters data={data} onFilterChange={setFilters} />
 
-      <div className="grid gap-6 [grid-template-columns:repeat(auto-fit,minmax(415px,1fr))]">
+      <div className="grid gap-6 [grid-template-columns:repeat(auto-fit,minmax(360px,1fr))]">
         {filtered.map(g => (
           <GroupCard key={g.id} group={g} onCompareToggle={onCompareToggle} />
         ))}
