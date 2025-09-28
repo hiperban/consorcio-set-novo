@@ -5,22 +5,13 @@ import { useEffect, useMemo, useState } from 'react';
 import Filters from '@/components/Filters';
 import GroupCard from '@/components/GroupCard';
 
-/* Normalização e canonização de produto */
+/* Normaliza texto p/ comparação (compatível) */
 function N(v) {
   return String(v ?? '')
     .normalize('NFD')
-    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/[\u0300-\u036f]/g, '') // remove acentos
     .trim()
     .toUpperCase();
-}
-function productKey(v) {
-  const t = N(v);
-  if (['AUTOMOVEL','VEICULO','VEICULOS','CARRO','CARROS','VEICULAR'].includes(t)) return 'AUTOMOVEL';
-  if (['SERVICO','SERVICOS','SERVIÇO','SERVIÇOS','SERV'].includes(t)) return 'SERVICOS';
-  if (['MOTO','MOTOCICLETA','MOTOS'].includes(t)) return 'MOTO';
-  if (['IMOVEL','IMOVEIS','IMÓVEL','IMÓVEIS','IMOBILIARIO','IMOBILIÁRIO'].includes(t)) return 'IMOVEL';
-  if (['CAMINHAO','CAMINHAOES','CAMINHÃO','CAMINHÕES','PESADOS','CAMINHAO/PESADOS'].includes(t)) return 'CAMINHAO';
-  return 'OUTROS BENS';
 }
 
 /* Junta vários datasets do /public/data */
@@ -58,15 +49,15 @@ export default function Home() {
     loadAll();
   }, []);
 
-  /* Filtro com adminId + chave canônica de produto + normalização de tipo */
+  /* Filtro com comparação por administradoraId + normalização nos demais */
   const filtered = useMemo(() => {
     const { minCarta, maxCarta, admId, lanceMin, produto, tipoGrupo, prazo } = filters || {};
     return (data.grupos || []).filter(g => {
       const okMin   = minCarta == null ? true : Number(g?.valorCarta ?? 0)  >= Number(minCarta);
       const okMax   = maxCarta == null ? true : Number(g?.valorCarta ?? 0)  <= Number(maxCarta);
-      const okAdm   = !admId    ? true : String(g?.administradoraId ?? '') === String(admId);
-      const okProd  = !produto  ? true : productKey(g?.produto)            === String(produto);
-      const okTipo  = !tipoGrupo? true : N(g?.tipoGrupo)                    === String(tipoGrupo);
+      const okAdm   = !admId    ? true : String(g?.administradoraId ?? '') === String(admId); // usa ID estável
+      const okProd  = !produto  ? true : N(g?.produto)   === String(produto);
+      const okTipo  = !tipoGrupo? true : N(g?.tipoGrupo) === String(tipoGrupo);
       const okLance = lanceMin == null ? true : Number(g?.lanceMedio ?? 0) >= Number(lanceMin);
       const okPrazo = prazo == null ? true : Number(g?.prazo ?? 0)          === Number(prazo);
       return okMin && okMax && okAdm && okProd && okTipo && okLance && okPrazo;
