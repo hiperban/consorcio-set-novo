@@ -1,0 +1,106 @@
+{
+  "administradoras": [
+    {
+      "id": "2",
+      "nome": "TRADIÇÃO"
+    }
+  ],
+  "grupos": [
+    {
+      "id": "2",
+      "numeroGrupo": "901",
+      "administradoraId": "2",
+      "produto": "VIAGENS",
+      "tipoGrupo": "PARCELA INTEGRAL",
+      "valorCarta": 25000,
+      "valorParcela": 555.65,
+      "taxaAdm": 17,
+      "lanceMedio": 0,
+      "lanceEmbutidoPermite": 0,
+      "totalParticipantes": 999,
+      "diaAssembleia": "10",
+      "prazo": 56,
+      "nomeAdministradora": "TRADIÇÃO"
+    },
+    {
+      "id": "G-901-1759013420129",
+      "numeroGrupo": "901",
+      "administradoraId": "2",
+      "produto": "VIAGENS",
+      "tipoGrupo": "PARCELA INTEGRAL",
+      "valorCarta": 30000,
+      "valorParcela": 666.77,
+      "taxaAdm": 17,
+      "lanceMedio": 0,
+      "lanceEmbutidoPermite": 0,
+      "totalParticipantes": 999,
+      "diaAssembleia": "10",
+      "prazo": 56,
+      "nomeAdministradora": "TRADIÇÃO"
+    },
+    {
+      "id": "G-901-1759013439472",
+      "numeroGrupo": "901",
+      "administradoraId": "2",
+      "produto": "VIAGENS",
+      "tipoGrupo": "PARCELA INTEGRAL",
+      "valorCarta": 35000,
+      "valorParcela": 777.9,
+      "taxaAdm": 17,
+      "lanceMedio": 0,
+      "lanceEmbutidoPermite": 0,
+      "totalParticipantes": 999,
+      "diaAssembleia": "10",
+      "prazo": 56,
+      "nomeAdministradora": "TRADIÇÃO"
+    },
+    {
+      "id": "G-901-1759013449263",
+      "numeroGrupo": "901",
+      "administradoraId": "2",
+      "produto": "VIAGENS",
+      "tipoGrupo": "PARCELA INTEGRAL",
+      "valorCarta": 40000,
+      "valorParcela": 889.03,
+      "taxaAdm": 17,
+      "lanceMedio": 0,
+      "lanceEmbutidoPermite": 0,
+      "totalParticipantes": 999,
+      "diaAssembleia": "10",
+      "prazo": 56,
+      "nomeAdministradora": "TRADIÇÃO"
+    },
+    {
+      "id": "G-901-1759013458556",
+      "numeroGrupo": "901",
+      "administradoraId": "2",
+      "produto": "VIAGENS",
+      "tipoGrupo": "PARCELA INTEGRAL",
+      "valorCarta": 45000,
+      "valorParcela": 1000.16,
+      "taxaAdm": 17,
+      "lanceMedio": 0,
+      "lanceEmbutidoPermite": 0,
+      "totalParticipantes": 999,
+      "diaAssembleia": "10",
+      "prazo": 56,
+      "nomeAdministradora": "TRADIÇÃO"
+    },
+    {
+      "id": "G-901-1759013468056",
+      "numeroGrupo": "901",
+      "administradoraId": "2",
+      "produto": "VIAGENS",
+      "tipoGrupo": "PARCELA INTEGRAL",
+      "valorCarta": 50000,
+      "valorParcela": 1111.29,
+      "taxaAdm": 17,
+      "lanceMedio": 0,
+      "lanceEmbutidoPermite": 0,
+      "totalParticipantes": 999,
+      "diaAssembleia": "10",
+      "prazo": 56,
+      "nomeAdministradora": "TRADIÇÃO"
+    }
+  ]
+}
