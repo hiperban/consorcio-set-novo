@@ -1,6 +1,33 @@
-// DENTRO de page.jsx do /compare, substitua o Table por este mais robusto (opcional)
-function fmtBRL(v){ const n = Number(v ?? 0); return isFinite(n) ? n.toLocaleString('pt-BR',{style:'currency',currency:'BRL'}) : '—'; }
-function fmtNum(v){ const n = Number(v ?? 0); return isFinite(n) ? n.toLocaleString('pt-BR') : '—'; }
+'use client';
+
+// Desliga qualquer cache/prerender nessa rota:
+export const dynamic = 'force-dynamic';
+export const revalidate = 0;
+export const fetchCache = 'force-no-store';
+
+import { useEffect, useMemo, useState } from 'react';
+
+/** Junta vários datasets do /public/data */
+function mergeDatasets(list) {
+  const admMap = new Map();
+  const grupos = [];
+  for (const d of list || []) {
+    const adms = Array.isArray(d?.administradoras) ? d.administradoras : [];
+    const gs   = Array.isArray(d?.grupos) ? d.grupos : [];
+    adms.forEach(a => { if (a?.id && !admMap.has(a.id)) admMap.set(String(a.id), a); });
+    gs.forEach(g => grupos.push(g));
+  }
+  return { administradoras: Array.from(admMap.values()), grupos };
+}
+
+function fmtBRL(v){
+  const n = Number(v ?? 0);
+  return Number.isFinite(n) ? n.toLocaleString('pt-BR',{style:'currency',currency:'BRL'}) : '—';
+}
+function fmtNum(v){
+  const n = Number(v ?? 0);
+  return Number.isFinite(n) ? n.toLocaleString('pt-BR') : '—';
+}
 
 function Table({ selected }) {
   const rows = [
@@ -17,6 +44,7 @@ function Table({ selected }) {
     ['Prazo (meses)', g => fmtNum(g.prazo)],
     ['Assembleia (dia)', g => fmtNum(g.diaAssembleia)],
   ];
+
   return (
     <div className="card overflow-auto">
       <table className="min-w-full text-sm">
@@ -42,5 +70,50 @@ function Table({ selected }) {
         </tbody>
       </table>
     </div>
+  );
+}
+
+export default function ComparePage() {
+  const [data, setData] = useState({ administradoras: [], grupos: [] });
+  const [selectedIds, setSelectedIds] = useState([]);
+
+  useEffect(() => {
+    let alive = true;
+    (async () => {
+      try {
+        const man = await fetch('/data/_manifest.json', { cache: 'no-store' }).then(r => r.json());
+        const files = Array.isArray(man?.datasets) ? man.datasets : [];
+        const datasets = await Promise.all(
+          files.map(f => fetch(`/data/${f}`, { cache: 'no-store' }).then(r => r.json()))
+        );
+        if (alive) setData(mergeDatasets(datasets));
+      } catch {
+        if (alive) setData({ administradoras: [], grupos: [] });
+      }
+    })();
+
+    // recuperar seleção do localStorage
+    try {
+      const raw = localStorage.getItem('compareSelection');
+      if (raw) setSelectedIds(JSON.parse(raw));
+    } catch {}
+
+    return () => { alive = false; };
+  }, []);
+
+  const selected = useMemo(() => {
+    const set = new Set(selectedIds);
+    return (data.grupos || []).filter(g => set.has(g.id)).slice(0, 4);
+  }, [data, selectedIds]);
+
+  return (
+    <main className="container py-6 space-y-6">
+      <header>
+        <h1 className="text-2xl font-semibold text-brand-800">Comparar Grupos</h1>
+        <p className="text-sm text-gray-600">Tabela lado a lado com até 4 grupos.</p>
+      </header>
+
+      <Table selected={selected} />
+    </main>
   );
 }
