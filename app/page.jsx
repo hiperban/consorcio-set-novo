@@ -5,7 +5,7 @@ import { useEffect, useMemo, useState } from 'react';
 import Filters from '@/components/Filters';
 import GroupCard from '@/components/GroupCard';
 
-/* Normaliza texto p/ comparação (compatível em todos os browsers) */
+/* Normaliza texto p/ comparação (compatível) */
 function N(v) {
   return String(v ?? '')
     .normalize('NFD')
@@ -49,15 +49,15 @@ export default function Home() {
     loadAll();
   }, []);
 
-  /* Filtro com comparação normalizada */
+  /* Filtro com comparação por administradoraId + normalização nos demais */
   const filtered = useMemo(() => {
-    const { minCarta, maxCarta, adm, lanceMin, produto, tipoGrupo, prazo } = filters || {};
+    const { minCarta, maxCarta, admId, lanceMin, produto, tipoGrupo, prazo } = filters || {};
     return (data.grupos || []).filter(g => {
       const okMin   = minCarta == null ? true : Number(g?.valorCarta ?? 0)  >= Number(minCarta);
       const okMax   = maxCarta == null ? true : Number(g?.valorCarta ?? 0)  <= Number(maxCarta);
-      const okAdm   = !adm       ? true : N(g?.nomeAdministradora)          === String(adm);
-      const okProd  = !produto   ? true : N(g?.produto)                     === String(produto);
-      const okTipo  = !tipoGrupo ? true : N(g?.tipoGrupo)                   === String(tipoGrupo);
+      const okAdm   = !admId    ? true : String(g?.administradoraId ?? '') === String(admId); // usa ID estável
+      const okProd  = !produto  ? true : N(g?.produto)   === String(produto);
+      const okTipo  = !tipoGrupo? true : N(g?.tipoGrupo) === String(tipoGrupo);
       const okLance = lanceMin == null ? true : Number(g?.lanceMedio ?? 0) >= Number(lanceMin);
       const okPrazo = prazo == null ? true : Number(g?.prazo ?? 0)          === Number(prazo);
       return okMin && okMax && okAdm && okProd && okTipo && okLance && okPrazo;
