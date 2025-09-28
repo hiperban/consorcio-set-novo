@@ -115,11 +115,8 @@ export default function Home() {
 
   // ======== APLICA FILTROS (AND estrito) ========
   const filtered = useMemo(() => {
-    const {
-      minCarta, maxCarta,
-      adminKey, productKey,
-      tipoKey, lanceMin, prazo
-    } = filters || {};
+ const { minCarta, maxCarta, admKey, productKey, tipoKey, lanceMin, prazo } = filters || {};
+
 
     return (data.grupos || []).filter(g => {
       // Valor carta
@@ -130,10 +127,10 @@ export default function Home() {
       const okAdm = !adminKey ? true : g.__adminKey === String(adminKey);
 
       // Produto
-      const okProd = !productKey ? true : g.__productKey === String(productKey);
+      const okProd  = !productKey ? true : g.__productKey === String(productKey);
 
       // Tipo
-      const okTipo = !tipoKey ? true : g.__tipoKey === String(tipoKey);
+      const okTipo  = !tipoKey    ? true : g.__tipoKey    === String(tipoKey);
 
       // Lance mínimo
       const okLance = (lanceMin == null) ? true : g.__lanceMedio >= Number(lanceMin);
