@@ -5,7 +5,7 @@ import { useEffect, useMemo, useState } from 'react';
 import Filters from '@/components/Filters';
 import GroupCard from '@/components/GroupCard';
 
-/* Normalização compatível */
+/* ------------ Normalização & helpers ------------ */
 function N(v) {
   return String(v ?? '')
     .normalize('NFD')
@@ -13,19 +13,13 @@ function N(v) {
     .trim()
     .toUpperCase();
 }
-
-/* Canonização de Produto */
-function productKey(v) {
+function slugKey(v){
   const t = N(v);
-  if (['AUTOMOVEL','VEICULO','VEICULOS','CARRO','CARROS','VEICULAR'].includes(t)) return 'AUTOMOVEL';
-  if (['SERVICO','SERVICOS','SERVIÇO','SERVIÇOS','SERV'].includes(t)) return 'SERVICOS';
-  if (['MOTO','MOTOCICLETA','MOTOS'].includes(t)) return 'MOTO';
-  if (['IMOVEL','IMOVEIS','IMÓVEL','IMÓVEIS','IMOBILIARIO','IMOBILIÁRIO'].includes(t)) return 'IMOVEL';
-  if (['CAMINHAO','CAMINHAOES','CAMINHÃO','CAMINHÕES','PESADOS','CAMINHAO/PESADOS'].includes(t)) return 'CAMINHAO';
-  return 'OUTROS BENS';
+  const k = t.replace(/[^A-Z0-9]+/g,'_').replace(/^_|_$/g,'');
+  return k || 'OUTROS_BENS';
 }
 
-/* Junta datasets */
+/* ------------ Merge de datasets ------------ */
 function mergeDatasets(list) {
   const admMap = new Map(); // id -> {id,nome}
   const grupos = [];
@@ -38,11 +32,7 @@ function mergeDatasets(list) {
   return { administradoras: Array.from(admMap.values()), grupos };
 }
 
-/* Deriva a "chave" da administradora por NOME:
-   - tenta achar pelo ID no mapa de administradoras;
-   - se não encontrar, usa o nome que vem no grupo (nomeAdministradora);
-   - normaliza com N(...).
-*/
+/* ------------ Admin key por NOME ------------ */
 function adminKeyFromGroup(g, administradorasMap) {
   const id = String(g?.administradoraId ?? '');
   const byId = administradorasMap.get(id)?.nome;
@@ -55,7 +45,19 @@ export default function Home() {
   const [filters, setFilters] = useState({});
   const [compare, setCompare] = useState([]);
 
-  // mapa id->administradora para resolver nomes
+  // carrega mapa opcional de produtos
+  const [prodMap, setProdMap] = useState({ map:{}, labels:{} });
+  useEffect(() => {
+    (async () => {
+      try {
+        const j = await fetch('/data/_product-map.json', { cache:'no-store' }).then(r => r.ok ? r.json() : {map:{},labels:{}});
+        const map = {};
+        Object.entries(j.map || {}).forEach(([raw, key]) => { map[N(raw)] = String(key); });
+        setProdMap({ map, labels: j.labels || {} });
+      } catch { setProdMap({ map:{}, labels:{} }); }
+    })();
+  }, []);
+
   const administradorasMap = useMemo(() => {
     const m = new Map();
     (data?.administradoras || []).forEach(a => { if (a?.id) m.set(String(a.id), a); });
@@ -79,23 +81,31 @@ export default function Home() {
     loadAll();
   }, []);
 
-  /* Filtro: administradora por NOME canônico, produto canônico, demais normalizados */
+  // canoniza produto dinamicamente com fallback
+  const productKey = (label) => {
+    const norm = N(label);
+    const mapped = prodMap.map[norm];
+    return mapped || slugKey(norm);
+  };
+
+  /* ---------- aplica filtros ---------- */
   const filtered = useMemo(() => {
-    const { minCarta, maxCarta, admKey, lanceMin, produto, tipoGrupo, prazo } = filters || {};
+    const { minCarta, maxCarta, admKey, produtoKey, tipoGrupo, lanceMin, prazo } = filters || {};
     return (data.grupos || []).filter(g => {
       const okMin   = minCarta == null ? true : Number(g?.valorCarta ?? 0)  >= Number(minCarta);
       const okMax   = maxCarta == null ? true : Number(g?.valorCarta ?? 0)  <= Number(maxCarta);
 
-      const gAdmKey = adminKeyFromGroup(g, administradorasMap); // ← chave por nome
+      const gAdmKey = adminKeyFromGroup(g, administradorasMap);
       const okAdm   = !admKey ? true : gAdmKey === String(admKey);
 
-      const okProd  = !produto  ? true : productKey(g?.produto)  === String(produto);
-      const okTipo  = !tipoGrupo? true : N(g?.tipoGrupo)         === String(tipoGrupo);
+      const okProd  = !produtoKey ? true : productKey(g?.produto) === String(produtoKey);
+      const okTipo  = !tipoGrupo  ? true : N(g?.tipoGrupo)        === String(tipoGrupo);
       const okLance = lanceMin == null ? true : Number(g?.lanceMedio ?? 0) >= Number(lanceMin);
-      const okPrazo = prazo == null ? true : Number(g?.prazo ?? 0)          === Number(prazo);
+      const okPrazo = prazo == null    ? true : Number(g?.prazo ?? 0)      === Number(prazo);
+
       return okMin && okMax && okAdm && okProd && okTipo && okLance && okPrazo;
     });
-  }, [data, filters, administradorasMap]);
+  }, [data, filters, administradorasMap, prodMap]);
 
   function onCompareToggle(group, checked) {
     setCompare(prev => {
