@@ -5,11 +5,11 @@ import { useEffect, useMemo, useState } from 'react';
 import Filters from '@/components/Filters';
 import GroupCard from '@/components/GroupCard';
 
-/* Normaliza texto p/ comparação */
+/* Normaliza texto p/ comparação (compatível em todos os browsers) */
 function N(v) {
   return String(v ?? '')
     .normalize('NFD')
-    .replace(/\p{Diacritic}/gu, '')
+    .replace(/[\u0300-\u036f]/g, '') // remove acentos
     .trim()
     .toUpperCase();
 }
@@ -18,9 +18,11 @@ function N(v) {
 function mergeDatasets(list) {
   const admMap = new Map(); // id -> {id,nome}
   const grupos = [];
-  for (const d of list) {
-    (d?.administradoras || []).forEach(a => { if (!admMap.has(a.id)) admMap.set(a.id, a); });
-    (d?.grupos || []).forEach(g => grupos.push(g));
+  for (const d of list || []) {
+    const adms = Array.isArray(d?.administradoras) ? d.administradoras : [];
+    const gs   = Array.isArray(d?.grupos) ? d.grupos : [];
+    adms.forEach(a => { if (a?.id && !admMap.has(a.id)) admMap.set(a.id, a); });
+    gs.forEach(g => grupos.push(g));
   }
   return { administradoras: Array.from(admMap.values()), grupos };
 }
@@ -34,7 +36,7 @@ export default function Home() {
     async function loadAll() {
       try {
         const man = await fetch('/data/_manifest.json', { cache: 'no-store' }).then(r => r.json());
-        const files = Array.isArray(man.datasets) ? man.datasets : [];
+        const files = Array.isArray(man?.datasets) ? man.datasets : [];
         const datasets = await Promise.all(
           files.map(f => fetch(`/data/${f}`, { cache: 'no-store' }).then(r => r.json()))
         );
@@ -51,13 +53,13 @@ export default function Home() {
   const filtered = useMemo(() => {
     const { minCarta, maxCarta, adm, lanceMin, produto, tipoGrupo, prazo } = filters || {};
     return (data.grupos || []).filter(g => {
-      const okMin   = minCarta == null ? true : Number(g.valorCarta)  >= Number(minCarta);
-      const okMax   = maxCarta == null ? true : Number(g.valorCarta)  <= Number(maxCarta);
-      const okAdm   = !adm       ? true : N(g.nomeAdministradora)     === String(adm);             // adm já vem normalizado
-      const okProd  = !produto   ? true : N(g.produto)                === String(produto);         // produto normalizado
-      const okTipo  = !tipoGrupo ? true : N(g.tipoGrupo)              === String(tipoGrupo);       // tipo normalizado
-      const okLance = lanceMin == null ? true : Number(g.lanceMedio)  >= Number(lanceMin);
-      const okPrazo = prazo == null ? true : Number(g.prazo)          === Number(prazo);
+      const okMin   = minCarta == null ? true : Number(g?.valorCarta ?? 0)  >= Number(minCarta);
+      const okMax   = maxCarta == null ? true : Number(g?.valorCarta ?? 0)  <= Number(maxCarta);
+      const okAdm   = !adm       ? true : N(g?.nomeAdministradora)          === String(adm);
+      const okProd  = !produto   ? true : N(g?.produto)                     === String(produto);
+      const okTipo  = !tipoGrupo ? true : N(g?.tipoGrupo)                   === String(tipoGrupo);
+      const okLance = lanceMin == null ? true : Number(g?.lanceMedio ?? 0) >= Number(lanceMin);
+      const okPrazo = prazo == null ? true : Number(g?.prazo ?? 0)          === Number(prazo);
       return okMin && okMax && okAdm && okProd && okTipo && okLance && okPrazo;
     });
   }, [data, filters]);
@@ -68,9 +70,8 @@ export default function Home() {
       if (checked) {
         if (!set.has(group.id)) return [...prev, group];
         return prev;
-      } else {
-        return prev.filter(x => x.id !== group.id);
       }
+      return prev.filter(x => x.id !== group.id);
     });
     try {
       const ids = (checked ? [...compare, group] : compare.filter(x => x.id !== group.id)).map(x => x.id);
