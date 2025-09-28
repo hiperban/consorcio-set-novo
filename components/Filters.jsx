@@ -1,50 +1,86 @@
 'use client';
 import { useMemo, useState } from 'react';
 
+/* Helpers */
+function N(v){
+  return String(v ?? '')
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/\s+/g,' ')
+    .trim()
+    .toUpperCase();
+}
+function slugKey(v){
+  const t = N(v);
+  const k = t.replace(/[^A-Z0-9]+/g,'_').replace(/^_|_$/g,'');
+  return k || 'OUTROS_BENS';
+}
+function toTitle(s){
+  return String(s || '')
+    .toLowerCase()
+    .replace(/(^|[\s_-])([a-zà-ú])/g, (_,p,c)=> p + c.toUpperCase());
+}
+
 export default function Filters({ data, onApply }){
-  // estados simples (sem máscara pra não atrapalhar o Apply)
+  // estados simples
   const [minCarta, setMinCarta] = useState('');
   const [maxCarta, setMaxCarta] = useState('');
-  const [admin, setAdmin] = useState('');
-  const [produto, setProduto] = useState('');
+  const [adminKey, setAdminKey] = useState('');     // ← agora já guarda a CHAVE
+  const [productKey, setProductKey] = useState(''); // ← idem
   const [tipo, setTipo] = useState('');
   const [lanceMin, setLanceMin] = useState('');
   const [prazo, setPrazo] = useState('');
 
-  // opções (usando o que está nos grupos carregados)
+  // Administradoras: value = __adminKey, label = nome bonito
   const adminOptions = useMemo(() => {
-    const s = new Set();
-    (data?.grupos || []).forEach(g => s.add(g.__adminName || g.nomeAdministradora || ''));
-    return Array.from(s).filter(Boolean).sort((a,b)=> a.localeCompare(b,'pt-BR'));
+    const m = new Map(); // key -> label
+    (data?.grupos || []).forEach(g => {
+      const key = g.__adminKey;
+      const label = g.__adminName || g.nomeAdministradora || key;
+      if (key && !m.has(key)) m.set(key, label);
+    });
+    (data?.administradoras || []).forEach(a => {
+      const key = N(a?.nome || '');
+      const label = a?.nome || key;
+      if (key && !m.has(key)) m.set(key, label);
+    });
+    return Array.from(m.entries())
+      .map(([value,label]) => ({ value, label }))
+      .sort((a,b)=> String(a.label).localeCompare(String(b.label),'pt-BR'));
   }, [data]);
 
-  // produto depende da admin selecionada (pra evitar produtos “das outras”)
+  // Produtos dependem da admin escolhida: value = __productKey, label = produto
   const productOptions = useMemo(() => {
-    const s = new Set();
+    const m = new Map(); // key -> label
     (data?.grupos || []).forEach(g => {
-      if (admin && (g.__adminName || g.nomeAdministradora) !== admin) return;
-      if (g?.produto) s.add(g.produto);
+      if (adminKey && g.__adminKey !== adminKey) return;
+      const key = g.__productKey;
+      const label = toTitle(String(g?.produto || key).replace(/_/g,' '));
+      if (key && !m.has(key)) m.set(key, label);
     });
-    return Array.from(s).filter(Boolean).sort((a,b)=> a.localeCompare(b,'pt-BR'));
-  }, [data, admin]);
+    return Array.from(m.entries())
+      .map(([value,label]) => ({ value, label }))
+      .sort((a,b)=> a.label.localeCompare(b.label,'pt-BR'));
+  }, [data, adminKey]);
 
   const aplicar = () => {
     onApply({
       minCarta: minCarta ? parseFloat(minCarta) : undefined,
       maxCarta: maxCarta ? parseFloat(maxCarta) : undefined,
-      admin: admin || '',
-      produto: produto || '',
+      // Passa as CHAVES diretamente:
+      adminKey: adminKey || '',
+      productKey: productKey || '',
       tipo: tipo || '',
       lanceMin: lanceMin ? parseFloat(lanceMin) : undefined,
-      prazo: prazo ? parseInt(prazo, 10) : undefined,
+      prazo: prazo ? parseInt(prazo,10) : undefined,
     });
   };
 
   const limpar = () => {
     setMinCarta(''); setMaxCarta('');
-    setAdmin(''); setProduto('');
+    setAdminKey(''); setProductKey('');
     setTipo(''); setLanceMin(''); setPrazo('');
-    onApply({}); // zera na página também
+    onApply({});
   };
 
   return (
@@ -57,20 +93,23 @@ export default function Filters({ data, onApply }){
         <label className="block text-xs text-gray-600 mb-1">Valor Carta Máx</label>
         <input value={maxCarta} onChange={e=>setMaxCarta(e.target.value)} placeholder="ex.: 50000" className="w-full border rounded-2xl px-3 py-2"/>
       </div>
+
       <div>
         <label className="block text-xs text-gray-600 mb-1">Administradora</label>
-        <select value={admin} onChange={e=>{ setAdmin(e.target.value); setProduto(''); }} className="w-full border rounded-2xl px-3 py-2">
+        <select value={adminKey} onChange={e=>{ setAdminKey(e.target.value); setProductKey(''); }} className="w-full border rounded-2xl px-3 py-2">
           <option value="">Todas</option>
-          {adminOptions.map(n => (<option key={n} value={n}>{n}</option>))}
+          {adminOptions.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
         </select>
       </div>
+
       <div>
         <label className="block text-xs text-gray-600 mb-1">Produto</label>
-        <select value={produto} onChange={e=>setProduto(e.target.value)} className="w-full border rounded-2xl px-3 py-2">
+        <select value={productKey} onChange={e=>setProductKey(e.target.value)} className="w-full border rounded-2xl px-3 py-2">
           <option value="">Todos</option>
-          {productOptions.map(p => (<option key={p} value={p}>{p}</option>))}
+          {productOptions.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
         </select>
       </div>
+
       <div>
         <label className="block text-xs text-gray-600 mb-1">Tipo de Grupo</label>
         <select value={tipo} onChange={e=>setTipo(e.target.value)} className="w-full border rounded-2xl px-3 py-2">
@@ -79,10 +118,12 @@ export default function Filters({ data, onApply }){
           <option value="PARCELA REDUZIDA">Parcela Reduzida</option>
         </select>
       </div>
+
       <div>
         <label className="block text-xs text-gray-600 mb-1">% Lance Mínimo</label>
         <input value={lanceMin} onChange={e=>setLanceMin(e.target.value)} placeholder="ex.: 20" className="w-full border rounded-2xl px-3 py-2"/>
       </div>
+
       <div>
         <label className="block text-xs text-gray-600 mb-1">Prazo (meses)</label>
         <input value={prazo} onChange={e=>setPrazo(e.target.value)} placeholder="ex.: 96" className="w-full border rounded-2xl px-3 py-2"/>
