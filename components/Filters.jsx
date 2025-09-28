@@ -22,16 +22,16 @@ function toTitle(s){
 }
 
 export default function Filters({ data, onApply }){
-  // estados simples
+  // estados simples (os selects guardam CHAVES)
   const [minCarta, setMinCarta] = useState('');
   const [maxCarta, setMaxCarta] = useState('');
-  const [adminKey, setAdminKey] = useState('');     // ← agora já guarda a CHAVE
-  const [productKey, setProductKey] = useState(''); // ← idem
-  const [tipo, setTipo] = useState('');
+  const [adminKey, setAdminKey] = useState('');     // ← chave canônica
+  const [productKey, setProductKey] = useState(''); // ← chave canônica
+  const [tipoKey, setTipoKey] = useState('');       // ← chave canônica
   const [lanceMin, setLanceMin] = useState('');
   const [prazo, setPrazo] = useState('');
 
-  // Administradoras: value = __adminKey, label = nome bonito
+  // Administradoras: value = __adminKey, label = nome “bonito”
   const adminOptions = useMemo(() => {
     const m = new Map(); // key -> label
     (data?.grupos || []).forEach(g => {
@@ -49,7 +49,7 @@ export default function Filters({ data, onApply }){
       .sort((a,b)=> String(a.label).localeCompare(String(b.label),'pt-BR'));
   }, [data]);
 
-  // Produtos dependem da admin escolhida: value = __productKey, label = produto
+  // Produtos dependem da admin escolhida: value = __productKey, label = texto amigável
   const productOptions = useMemo(() => {
     const m = new Map(); // key -> label
     (data?.grupos || []).forEach(g => {
@@ -67,10 +67,9 @@ export default function Filters({ data, onApply }){
     onApply({
       minCarta: minCarta ? parseFloat(minCarta) : undefined,
       maxCarta: maxCarta ? parseFloat(maxCarta) : undefined,
-      // Passa as CHAVES diretamente:
-      adminKey: adminKey || '',
-      productKey: productKey || '',
-      tipo: tipo || '',
+      adminKey: adminKey || '',      // ← passa CHAVE
+      productKey: productKey || '',  // ← passa CHAVE
+      tipoKey: tipoKey || '',        // ← passa CHAVE
       lanceMin: lanceMin ? parseFloat(lanceMin) : undefined,
       prazo: prazo ? parseInt(prazo,10) : undefined,
     });
@@ -79,8 +78,8 @@ export default function Filters({ data, onApply }){
   const limpar = () => {
     setMinCarta(''); setMaxCarta('');
     setAdminKey(''); setProductKey('');
-    setTipo(''); setLanceMin(''); setPrazo('');
-    onApply({});
+    setTipoKey(''); setLanceMin(''); setPrazo('');
+    onApply({}); // zera na página também
   };
 
   return (
@@ -112,10 +111,10 @@ export default function Filters({ data, onApply }){
 
       <div>
         <label className="block text-xs text-gray-600 mb-1">Tipo de Grupo</label>
-        <select value={tipo} onChange={e=>setTipo(e.target.value)} className="w-full border rounded-2xl px-3 py-2">
+        <select value={tipoKey} onChange={e=>setTipoKey(e.target.value)} className="w-full border rounded-2xl px-3 py-2">
           <option value="">Todos</option>
-          <option value="PARCELA INTEGRAL">Parcela Integral</option>
-          <option value="PARCELA REDUZIDA">Parcela Reduzida</option>
+          <option value={N('PARCELA INTEGRAL')}>Parcela Integral</option>
+          <option value={N('PARCELA REDUZIDA')}>Parcela Reduzida</option>
         </select>
       </div>
 
@@ -123,7 +122,6 @@ export default function Filters({ data, onApply }){
         <label className="block text-xs text-gray-600 mb-1">% Lance Mínimo</label>
         <input value={lanceMin} onChange={e=>setLanceMin(e.target.value)} placeholder="ex.: 20" className="w-full border rounded-2xl px-3 py-2"/>
       </div>
-
       <div>
         <label className="block text-xs text-gray-600 mb-1">Prazo (meses)</label>
         <input value={prazo} onChange={e=>setPrazo(e.target.value)} placeholder="ex.: 96" className="w-full border rounded-2xl px-3 py-2"/>
