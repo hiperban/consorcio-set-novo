@@ -19,7 +19,6 @@ function slugKey(v){
   const k = t.replace(/[^A-Z0-9]+/g,'_').replace(/^_|_$/g,'');
   return k || 'OUTROS_BENS';
 }
-// números tolerantes: aceita "R$ 25.000,00", "25000.00", "56", "56 meses"
 function numLoose(v){
   if (v == null) return NaN;
   if (typeof v === 'number') return v;
@@ -38,7 +37,7 @@ function intLoose(v){
   return m ? parseInt(m[0], 10) : NaN;
 }
 
-/* ========= Merge e PREPROCESS ========= */
+/* ========= Merge ========= */
 function mergeDatasets(list) {
   const admMap = new Map(); // id -> {id,nome}
   const grupos = [];
@@ -51,7 +50,6 @@ function mergeDatasets(list) {
   return { administradoras: Array.from(admMap.values()), grupos };
 }
 
-/* Deriva NOME da administradora para chavear por nome (estável entre arquivos) */
 function adminKeyFromGroup(g, administradorasMap) {
   const id = String(g?.administradoraId ?? '');
   const byId = administradorasMap.get(id)?.nome;
@@ -88,7 +86,7 @@ export default function Home() {
     return m;
   }, [raw]);
 
-  // ======== PREPROCESS: gera campos canônicos e numéricos uma única vez ========
+  // PREPROCESS: gera campos canônicos e numéricos
   const data = useMemo(() => {
     const grupos = (raw.grupos || []).map((g) => {
       const adminKey = adminKeyFromGroup(g, administradorasMap);
@@ -98,7 +96,6 @@ export default function Home() {
       const valorParcela = numLoose(g?.valorParcela);
       const lanceMedio = numLoose(g?.lanceMedio);
       const prazo = intLoose(g?.prazo);
-
       return {
         ...g,
         __adminKey: adminKey,
@@ -113,31 +110,22 @@ export default function Home() {
     return { administradoras: raw.administradoras, grupos };
   }, [raw, administradorasMap]);
 
-  // ======== APLICA FILTROS (AND estrito) ========
+  // FILTROS (AND estrito) — use os nomes *productKey* e *tipoKey*
   const filtered = useMemo(() => {
- const { minCarta, maxCarta, admKey, productKey, tipoKey, lanceMin, prazo } = filters || {};
-
+    const {
+      minCarta, maxCarta,
+      adminKey, productKey,
+      tipoKey, lanceMin, prazo
+    } = filters || {};
 
     return (data.grupos || []).filter(g => {
-      // Valor carta
-      const okMin = (minCarta == null) ? true : g.__valorCarta >= Number(minCarta);
-      const okMax = (maxCarta == null) ? true : g.__valorCarta <= Number(maxCarta);
-
-      // Administradora
-      const okAdm = !adminKey ? true : g.__adminKey === String(adminKey);
-
-      // Produto
-      const okProd  = !productKey ? true : g.__productKey === String(productKey);
-
-      // Tipo
-      const okTipo  = !tipoKey    ? true : g.__tipoKey    === String(tipoKey);
-
-      // Lance mínimo
+      const okMin   = (minCarta == null) ? true : g.__valorCarta >= Number(minCarta);
+      const okMax   = (maxCarta == null) ? true : g.__valorCarta <= Number(maxCarta);
+      const okAdm   = !adminKey  ? true : g.__adminKey   === String(adminKey);
+      const okProd  = !productKey? true : g.__productKey === String(productKey);
+      const okTipo  = !tipoKey   ? true : g.__tipoKey    === String(tipoKey);
       const okLance = (lanceMin == null) ? true : g.__lanceMedio >= Number(lanceMin);
-
-      // Prazo
-      const okPrazo = (prazo == null) ? true : g.__prazo === Number(prazo);
-
+      const okPrazo = (prazo == null)    ? true : g.__prazo      === Number(prazo);
       return okMin && okMax && okAdm && okProd && okTipo && okLance && okPrazo;
     });
   }, [data, filters]);
@@ -152,8 +140,8 @@ export default function Home() {
       return prev.filter(x => x.id !== group.id);
     });
     try {
-      const ids = (checked ? [...compare, group] : compare.filter(x => x.id !== group.id)).map(x => x.id);
-      localStorage.setItem('compareSelection', JSON.stringify(ids));
+      const next = (checked ? [...compare, group] : compare.filter(x => x.id !== group.id));
+      localStorage.setItem('compareSelection', JSON.stringify(next.map(x => x.id)));
     } catch {}
   }
 
@@ -161,15 +149,14 @@ export default function Home() {
     <main className="container py-6 space-y-6">
       <header>
         <h1 className="text-2xl font-semibold text-brand-800">Simulador de Consórcio</h1>
-        <p className="text-sm text-gray-600">Filtros 100% confiáveis e consistentes entre arquivos.</p>
+        <p className="text-sm text-gray-600">Filtros 100% consistentes e defensivos.</p>
       </header>
 
-      {/* Passo os grupos PREPROCESSADOS para o Filters montar opções corretas */}
       <Filters data={data} onFilterChange={setFilters} />
 
       <div className="grid gap-6 [grid-template-columns:repeat(auto-fit,minmax(360px,1fr))]">
-        {filtered.map(g => (
-          <GroupCard key={g.id} group={g} onCompareToggle={onCompareToggle} />
+        {(filtered || []).map(g => (
+          <GroupCard key={g.id ?? `${g.__adminKey}-${g.__productKey}-${g.numeroGrupo ?? Math.random()}`} group={g} onCompareToggle={onCompareToggle} />
         ))}
       </div>
     </main>
