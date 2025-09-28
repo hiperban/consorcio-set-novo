@@ -5,7 +5,7 @@ import { useEffect, useMemo, useState } from 'react';
 import Filters from '@/components/Filters';
 import GroupCard from '@/components/GroupCard';
 
-/* ------------ Normalização & helpers ------------ */
+/* ===== Helpers de normalização e números tolerantes ===== */
 function N(v) {
   return String(v ?? '')
     .normalize('NFD')
@@ -18,21 +18,37 @@ function slugKey(v){
   const k = t.replace(/[^A-Z0-9]+/g,'_').replace(/^_|_$/g,'');
   return k || 'OUTROS_BENS';
 }
+function numLoose(v){
+  if (typeof v === 'number') return v;
+  const s = String(v ?? '').trim();
+  if (!s) return NaN;
+  // mantém dígitos, ponto, vírgula e sinal
+  let t = s.replace(/[^\d,-.]/g, '');
+  // se tem vírgula e ponto, assume . = milhar e , = decimal
+  if (t.includes(',') && t.includes('.')) t = t.replace(/\./g,'').replace(',', '.');
+  else if (t.includes(',') && !t.includes('.')) t = t.replace(',', '.');
+  return parseFloat(t);
+}
+function intLoose(v){
+  if (typeof v === 'number') return Math.trunc(v);
+  const m = String(v ?? '').match(/\d+/);
+  return m ? parseInt(m[0], 10) : NaN;
+}
 
-/* ------------ Merge de datasets ------------ */
+/* ===== Merge datasets ===== */
 function mergeDatasets(list) {
-  const admMap = new Map(); // id -> {id,nome}
+  const admMap = new Map();
   const grupos = [];
   for (const d of list || []) {
     const adms = Array.isArray(d?.administradoras) ? d.administradoras : [];
     const gs   = Array.isArray(d?.grupos) ? d.grupos : [];
-    adms.forEach(a => { if (a?.id && !admMap.has(a.id)) admMap.set(a.id, a); });
+    adms.forEach(a => { if (a?.id && !admMap.has(a.id)) admMap.set(String(a.id), a); });
     gs.forEach(g => grupos.push(g));
   }
   return { administradoras: Array.from(admMap.values()), grupos };
 }
 
-/* ------------ Admin key por NOME ------------ */
+/* Deriva NOME da administradora para chavear por nome (estável entre arquivos) */
 function adminKeyFromGroup(g, administradorasMap) {
   const id = String(g?.administradoraId ?? '');
   const byId = administradorasMap.get(id)?.nome;
@@ -44,20 +60,6 @@ export default function Home() {
   const [data, setData] = useState({ administradoras: [], grupos: [] });
   const [filters, setFilters] = useState({});
   const [compare, setCompare] = useState([]);
-
-  // carrega mapa opcional de produtos (agrupamentos/sinônimos/labels)
-  const [prodMap, setProdMap] = useState({ map:{}, labels:{} });
-  useEffect(() => {
-    (async () => {
-      try {
-        const j = await fetch('/data/_product-map.json', { cache:'no-store' })
-          .then(r => r.ok ? r.json() : {map:{},labels:{}});
-        const map = {};
-        Object.entries(j.map || {}).forEach(([raw, key]) => { map[N(raw)] = String(key); });
-        setProdMap({ map, labels: j.labels || {} });
-      } catch { setProdMap({ map:{}, labels:{} }); }
-    })();
-  }, []);
 
   const administradorasMap = useMemo(() => {
     const m = new Map();
@@ -82,39 +84,38 @@ export default function Home() {
     loadAll();
   }, []);
 
-  // canoniza produto dinamicamente com fallback
-  const productKey = (label) => {
-    const norm = N(label);
-    const mapped = prodMap.map[norm];
-    return mapped || slugKey(norm);
-  };
-
-  /* ---------- aplica filtros ---------- */
+  /* ===== Aplicação dos filtros ===== */
   const filtered = useMemo(() => {
-    const { minCarta, maxCarta, admKey, produtoKey, tipoKey, lanceMin, prazo } = filters || {};
+    const { minCarta, maxCarta, adminKey, productKey, tipoKey, lanceMin, prazo } = filters || {};
     return (data.grupos || []).filter(g => {
-      const okMin   = minCarta == null ? true : Number(g?.valorCarta ?? 0)  >= Number(minCarta);
-      const okMax   = maxCarta == null ? true : Number(g?.valorCarta ?? 0)  <= Number(maxCarta);
+      // números tolerantes
+      const valorCarta = numLoose(g?.valorCarta);
+      const lanceMedio = numLoose(g?.lanceMedio);
+      const prazoMeses = intLoose(g?.prazo);
+
+      const okMin   = (minCarta == null) ? true : valorCarta >= Number(minCarta);
+      const okMax   = (maxCarta == null) ? true : valorCarta <= Number(maxCarta);
 
       const gAdmKey = adminKeyFromGroup(g, administradorasMap);
-      const okAdm   = !admKey ? true : gAdmKey === String(admKey);
+      const okAdm   = !adminKey ? true : gAdmKey === String(adminKey);
 
-      const okProd  = !produtoKey ? true : productKey(g?.produto) === String(produtoKey);
-      const okTipo  = !tipoKey    ? true : N(g?.tipoGrupo)        === String(tipoKey);
-      const okLance = lanceMin == null ? true : Number(g?.lanceMedio ?? 0) >= Number(lanceMin);
-      const okPrazo = prazo == null    ? true : Number(g?.prazo ?? 0)      === Number(prazo);
+      const gProdKey = slugKey(g?.produto);
+      const okProd  = !productKey ? true : gProdKey === String(productKey);
+
+      const okTipo  = !tipoKey ? true : N(g?.tipoGrupo) === String(tipoKey);
+
+      const okLance = (lanceMin == null) ? true : lanceMedio >= Number(lanceMin);
+
+      const okPrazo = (prazo == null) ? true : prazoMeses === Number(prazo);
 
       return okMin && okMax && okAdm && okProd && okTipo && okLance && okPrazo;
     });
-  }, [data, filters, administradorasMap, prodMap]);
+  }, [data, filters, administradorasMap]);
 
   function onCompareToggle(group, checked) {
     setCompare(prev => {
       const set = new Set(prev.map(x => x.id));
-      if (checked) {
-        if (!set.has(group.id)) return [...prev, group];
-        return prev;
-      }
+      if (checked) { if (!set.has(group.id)) return [...prev, group]; return prev; }
       return prev.filter(x => x.id !== group.id);
     });
     try {
