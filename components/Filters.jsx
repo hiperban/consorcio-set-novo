@@ -1,35 +1,14 @@
 'use client';
 import { useEffect, useMemo, useState } from 'react';
 
-/* Normalização compatível (remove acentos, trim, maiúsculas) */
-function N(v){
+/* Normalização compatível */
+function normalize(v){
   return String(v ?? '')
     .normalize('NFD')
     .replace(/[\u0300-\u036f]/g, '')
     .trim()
     .toUpperCase();
 }
-
-/* Canonização de Produto: sinônimos -> chave única */
-function productKey(v) {
-  const t = N(v);
-  if (['AUTOMOVEL','VEICULO','VEICULOS','CARRO','CARROS','VEICULAR'].includes(t)) return 'AUTOMOVEL';
-  if (['SERVICO','SERVICOS','SERVIÇO','SERVIÇOS','SERV'].includes(t)) return 'SERVICOS';
-  if (['MOTO','MOTOCICLETA','MOTOS'].includes(t)) return 'MOTO';
-  if (['IMOVEL','IMOVEIS','IMÓVEL','IMÓVEIS','IMOBILIARIO','IMOBILIÁRIO'].includes(t)) return 'IMOVEL';
-  if (['CAMINHAO','CAMINHAOES','CAMINHÃO','CAMINHÕES','PESADOS','CAMINHAO/PESADOS'].includes(t)) return 'CAMINHAO';
-  return 'OUTROS BENS'; // fallback canônico
-}
-
-/* Rótulo amigável para exibição */
-const PRODUCT_LABEL = {
-  AUTOMOVEL: 'Automóvel',
-  SERVICOS: 'Serviços',
-  MOTO: 'Moto',
-  IMOVEL: 'Imóvel',
-  CAMINHAO: 'Caminhão',
-  'OUTROS BENS': 'Outros Bens',
-};
 
 /* Helpers de máscara BRL */
 function maskBRL(input) {
@@ -50,29 +29,29 @@ export default function Filters({ data, onFilterChange }){
   const [maxCartaMasked, setMaxCartaMasked] = useState('');
 
   // Estados dos filtros
-  const [admId, setAdmId] = useState('');       // filtra por administradoraId (estável)
+  const [admId, setAdmId] = useState('');     // <- agora guarda administradoraId
   const [lanceMin, setLanceMin] = useState('');
-  const [produto, setProduto] = useState('');   // guarda a CHAVE canônica
-  const [tipoGrupo, setTipoGrupo] = useState(''); // normalizado
+  const [produto, setProduto] = useState(''); // envia normalizado
+  const [tipoGrupo, setTipoGrupo] = useState(''); // envia normalizado
   const [prazo, setPrazo] = useState('');
 
-  /* Opções de administradora: usa id estável + rótulo nome */
+  /* Opções: Administradora usa ID estável; label é o nome original */
   const administradoras = useMemo(() => {
     const list = Array.isArray(data?.administradoras) ? data.administradoras : [];
+    // filtra registros válidos e ordena por nome
     return list
       .filter(a => a && a.id && a.nome)
       .sort((a,b)=> String(a.nome).localeCompare(String(b.nome), 'pt-BR'));
   }, [data]);
 
-  /* Opções de produto: canoniza e evita duplicados */
   const produtos = useMemo(() => {
-    const set = new Set();
-    (data?.grupos || []).forEach(g => set.add(productKey(g?.produto)));
-    const keys = Array.from(set);
-    // ordena por rótulo amigável
-    return keys
-      .map(k => ({ value: k, label: PRODUCT_LABEL[k] ?? k }))
-      .sort((a,b)=> a.label.localeCompare(b.label, 'pt-BR'));
+    const map = new Map();
+    (data?.grupos || []).forEach(g => {
+      const label = String(g?.produto ?? '').trim();
+      const value = normalize(label);
+      if (value && !map.has(value)) map.set(value, { label, value });
+    });
+    return Array.from(map.values()).sort((x,y)=>x.label.localeCompare(y.label,'pt-BR'));
   }, [data]);
 
   useEffect(()=>{
@@ -84,9 +63,9 @@ export default function Filters({ data, onFilterChange }){
     onFilterChange({
       minCarta: Number.isNaN(min) ? undefined : min,
       maxCarta: Number.isNaN(max) ? undefined : max,
-      admId: admId || '',
-      produto: produto || '',               // CHAVE canônica
-      tipoGrupo: N(tipoGrupo || ''),        // normalizado
+      admId: admId || '',                 // <- envia administradoraId
+      produto: produto || '',             // normalizado
+      tipoGrupo: tipoGrupo || '',         // normalizado
       lanceMin: Number.isNaN(lance) ? undefined : lance,
       prazo: Number.isNaN(prazoNum) ? undefined : prazoNum
     });
@@ -154,8 +133,8 @@ export default function Filters({ data, onFilterChange }){
           className="w-full border rounded-2xl px-3 py-2"
         >
           <option value="">Todos</option>
-          <option value={N('PARCELA REDUZIDA')}>PARCELA REDUZIDA</option>
-          <option value={N('PARCELA INTEGRAL')}>PARCELA INTEGRAL</option>
+          <option value={normalize('PARCELA REDUZIDA')}>PARCELA REDUZIDA</option>
+          <option value={normalize('PARCELA INTEGRAL')}>PARCELA INTEGRAL</option>
         </select>
       </div>
 
