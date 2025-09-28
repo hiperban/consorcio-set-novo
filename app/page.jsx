@@ -5,11 +5,12 @@ import { useEffect, useMemo, useState } from 'react';
 import Filters from '@/components/Filters';
 import GroupCard from '@/components/GroupCard';
 
-/* ===== Helpers de normalização e números tolerantes ===== */
-function N(v) {
+/* ========= Helpers robustos ========= */
+function N(v){
   return String(v ?? '')
     .normalize('NFD')
     .replace(/[\u0300-\u036f]/g, '')
+    .replace(/\s+/g, ' ')
     .trim()
     .toUpperCase();
 }
@@ -18,31 +19,33 @@ function slugKey(v){
   const k = t.replace(/[^A-Z0-9]+/g,'_').replace(/^_|_$/g,'');
   return k || 'OUTROS_BENS';
 }
+// números tolerantes: aceita "R$ 25.000,00", "25000.00", "56", "56 meses"
 function numLoose(v){
+  if (v == null) return NaN;
   if (typeof v === 'number') return v;
-  const s = String(v ?? '').trim();
+  let s = String(v).trim();
   if (!s) return NaN;
-  // mantém dígitos, ponto, vírgula e sinal
-  let t = s.replace(/[^\d,-.]/g, '');
-  // se tem vírgula e ponto, assume . = milhar e , = decimal
-  if (t.includes(',') && t.includes('.')) t = t.replace(/\./g,'').replace(',', '.');
-  else if (t.includes(',') && !t.includes('.')) t = t.replace(',', '.');
-  return parseFloat(t);
+  s = s.replace(/[^\d,.-]/g, '');
+  if (s.includes(',') && s.includes('.')) s = s.replace(/\./g,'').replace(',', '.');
+  else if (s.includes(',') && !s.includes('.')) s = s.replace(',', '.');
+  const n = parseFloat(s);
+  return Number.isFinite(n) ? n : NaN;
 }
 function intLoose(v){
+  if (v == null) return NaN;
   if (typeof v === 'number') return Math.trunc(v);
-  const m = String(v ?? '').match(/\d+/);
+  const m = String(v).match(/\d+/);
   return m ? parseInt(m[0], 10) : NaN;
 }
 
-/* ===== Merge datasets ===== */
+/* ========= Merge e PREPROCESS ========= */
 function mergeDatasets(list) {
-  const admMap = new Map();
+  const admMap = new Map(); // id -> {id,nome}
   const grupos = [];
   for (const d of list || []) {
     const adms = Array.isArray(d?.administradoras) ? d.administradoras : [];
     const gs   = Array.isArray(d?.grupos) ? d.grupos : [];
-    adms.forEach(a => { if (a?.id && !admMap.has(a.id)) admMap.set(String(a.id), a); });
+    adms.forEach(a => { if (a?.id && !admMap.has(String(a.id))) admMap.set(String(a.id), a); });
     gs.forEach(g => grupos.push(g));
   }
   return { administradoras: Array.from(admMap.values()), grupos };
@@ -57,65 +60,98 @@ function adminKeyFromGroup(g, administradorasMap) {
 }
 
 export default function Home() {
-  const [data, setData] = useState({ administradoras: [], grupos: [] });
+  const [raw, setRaw] = useState({ administradoras: [], grupos: [] });
   const [filters, setFilters] = useState({});
   const [compare, setCompare] = useState([]);
 
-  const administradorasMap = useMemo(() => {
-    const m = new Map();
-    (data?.administradoras || []).forEach(a => { if (a?.id) m.set(String(a.id), a); });
-    return m;
-  }, [data]);
-
+  // carrega dados
   useEffect(() => {
-    async function loadAll() {
+    (async () => {
       try {
         const man = await fetch('/data/_manifest.json', { cache: 'no-store' }).then(r => r.json());
         const files = Array.isArray(man?.datasets) ? man.datasets : [];
         const datasets = await Promise.all(
           files.map(f => fetch(`/data/${f}`, { cache: 'no-store' }).then(r => r.json()))
         );
-        setData(mergeDatasets(datasets));
+        setRaw(mergeDatasets(datasets));
       } catch (e) {
         console.error('Erro ao carregar datasets:', e);
-        setData({ administradoras: [], grupos: [] });
+        setRaw({ administradoras: [], grupos: [] });
       }
-    }
-    loadAll();
+    })();
   }, []);
 
-  /* ===== Aplicação dos filtros ===== */
-  const filtered = useMemo(() => {
-    const { minCarta, maxCarta, adminKey, productKey, tipoKey, lanceMin, prazo } = filters || {};
-    return (data.grupos || []).filter(g => {
-      // números tolerantes
+  // mapa id->administradora
+  const administradorasMap = useMemo(() => {
+    const m = new Map();
+    (raw?.administradoras || []).forEach(a => { if (a?.id) m.set(String(a.id), a); });
+    return m;
+  }, [raw]);
+
+  // ======== PREPROCESS: gera campos canônicos e numéricos uma única vez ========
+  const data = useMemo(() => {
+    const grupos = (raw.grupos || []).map((g) => {
+      const adminKey = adminKeyFromGroup(g, administradorasMap);
+      const productKey = slugKey(g?.produto);
+      const tipoKey = N(g?.tipoGrupo);
       const valorCarta = numLoose(g?.valorCarta);
+      const valorParcela = numLoose(g?.valorParcela);
       const lanceMedio = numLoose(g?.lanceMedio);
-      const prazoMeses = intLoose(g?.prazo);
+      const prazo = intLoose(g?.prazo);
 
-      const okMin   = (minCarta == null) ? true : valorCarta >= Number(minCarta);
-      const okMax   = (maxCarta == null) ? true : valorCarta <= Number(maxCarta);
+      return {
+        ...g,
+        __adminKey: adminKey,
+        __productKey: productKey,
+        __tipoKey: tipoKey,
+        __valorCarta: valorCarta,
+        __valorParcela: valorParcela,
+        __lanceMedio: lanceMedio,
+        __prazo: prazo,
+      };
+    });
+    return { administradoras: raw.administradoras, grupos };
+  }, [raw, administradorasMap]);
 
-      const gAdmKey = adminKeyFromGroup(g, administradorasMap);
-      const okAdm   = !adminKey ? true : gAdmKey === String(adminKey);
+  // ======== APLICA FILTROS (AND estrito) ========
+  const filtered = useMemo(() => {
+    const {
+      minCarta, maxCarta,
+      adminKey, productKey,
+      tipoKey, lanceMin, prazo
+    } = filters || {};
 
-      const gProdKey = slugKey(g?.produto);
-      const okProd  = !productKey ? true : gProdKey === String(productKey);
+    return (data.grupos || []).filter(g => {
+      // Valor carta
+      const okMin = (minCarta == null) ? true : g.__valorCarta >= Number(minCarta);
+      const okMax = (maxCarta == null) ? true : g.__valorCarta <= Number(maxCarta);
 
-      const okTipo  = !tipoKey ? true : N(g?.tipoGrupo) === String(tipoKey);
+      // Administradora
+      const okAdm = !adminKey ? true : g.__adminKey === String(adminKey);
 
-      const okLance = (lanceMin == null) ? true : lanceMedio >= Number(lanceMin);
+      // Produto
+      const okProd = !productKey ? true : g.__productKey === String(productKey);
 
-      const okPrazo = (prazo == null) ? true : prazoMeses === Number(prazo);
+      // Tipo
+      const okTipo = !tipoKey ? true : g.__tipoKey === String(tipoKey);
+
+      // Lance mínimo
+      const okLance = (lanceMin == null) ? true : g.__lanceMedio >= Number(lanceMin);
+
+      // Prazo
+      const okPrazo = (prazo == null) ? true : g.__prazo === Number(prazo);
 
       return okMin && okMax && okAdm && okProd && okTipo && okLance && okPrazo;
     });
-  }, [data, filters, administradorasMap]);
+  }, [data, filters]);
 
   function onCompareToggle(group, checked) {
     setCompare(prev => {
       const set = new Set(prev.map(x => x.id));
-      if (checked) { if (!set.has(group.id)) return [...prev, group]; return prev; }
+      if (checked) {
+        if (!set.has(group.id)) return [...prev, group];
+        return prev;
+      }
       return prev.filter(x => x.id !== group.id);
     });
     try {
@@ -128,9 +164,10 @@ export default function Home() {
     <main className="container py-6 space-y-6">
       <header>
         <h1 className="text-2xl font-semibold text-brand-800">Simulador de Consórcio</h1>
-        <p className="text-sm text-gray-600">Filtros dinâmicos, visual moderno e contratação direta.</p>
+        <p className="text-sm text-gray-600">Filtros 100% confiáveis e consistentes entre arquivos.</p>
       </header>
 
+      {/* Passo os grupos PREPROCESSADOS para o Filters montar opções corretas */}
       <Filters data={data} onFilterChange={setFilters} />
 
       <div className="grid gap-6 [grid-template-columns:repeat(auto-fit,minmax(360px,1fr))]">
