@@ -1,10 +1,13 @@
 'use client';
 import { useEffect, useMemo, useState } from 'react';
 
-/* Normalização (trim + sem acento + MAIÚSC.) */
+/* Normalização compatível */
 function normalize(v){
-  if (v === undefined || v === null) return '';
-  return String(v).normalize('NFD').replace(/\p{Diacritic}/gu, '').trim().toUpperCase();
+  return String(v ?? '')
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .trim()
+    .toUpperCase();
 }
 
 /* Helpers de máscara BRL */
@@ -36,7 +39,7 @@ export default function Filters({ data, onFilterChange }){
   const administradoras = useMemo(() => {
     const map = new Map();
     (data?.administradoras || []).forEach(a => {
-      const label = a.nome ?? '';
+      const label = a?.nome ?? '';
       const value = normalize(label);
       if (value && !map.has(value)) map.set(value, { label, value });
     });
@@ -46,7 +49,7 @@ export default function Filters({ data, onFilterChange }){
   const produtos = useMemo(() => {
     const map = new Map();
     (data?.grupos || []).forEach(g => {
-      const label = String(g.produto ?? '').trim();
+      const label = String(g?.produto ?? '').trim();
       const value = normalize(label);
       if (value && !map.has(value)) map.set(value, { label, value });
     });
