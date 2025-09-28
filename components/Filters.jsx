@@ -1,11 +1,12 @@
 'use client';
 import { useEffect, useMemo, useState } from 'react';
 
-/* ========== Normalização e helpers ========== */
+/* ========= Helpers ========= */
 function N(v){
   return String(v ?? '')
     .normalize('NFD')
     .replace(/[\u0300-\u036f]/g, '')
+    .replace(/\s+/g, ' ')
     .trim()
     .toUpperCase();
 }
@@ -14,13 +15,7 @@ function toTitle(s){
     .toLowerCase()
     .replace(/(^|[\s_-])([a-zà-ú])/g, (_,p,c)=> p + c.toUpperCase());
 }
-function slugKey(v){
-  const t = N(v);
-  const k = t.replace(/[^A-Z0-9]+/g,'_').replace(/^_|_$/g,'');
-  return k || 'OUTROS_BENS';
-}
 
-/* ========== Máscara BRL ========== */
 function maskBRL(input) {
   const digits = String(input || '').replace(/\D/g, '');
   if (!digits) return '';
@@ -33,59 +28,54 @@ function parseBRLToNumber(masked) {
   return parseInt(digits, 10) / 100;
 }
 
+/* ========= Componente ========= */
 export default function Filters({ data, onFilterChange }){
-  // --- estados dos inputs ---
+  // Inputs
   const [minCartaMasked, setMinCartaMasked] = useState('');
   const [maxCartaMasked, setMaxCartaMasked] = useState('');
-  const [adminKey, setAdminKey] = useState('');     // administradora (por NOME canônico)
-  const [productKey, setProductKey] = useState(''); // produto (chave canônica)
-  const [tipoKey, setTipoKey] = useState('');       // tipo (canônico)
-  const [lanceMin, setLanceMin] = useState('');     // número
-  const [prazo, setPrazo] = useState('');           // número
+  const [adminKey, setAdminKey] = useState('');
+  const [productKey, setProductKey] = useState('');
+  const [tipoKey, setTipoKey] = useState('');
+  const [lanceMin, setLanceMin] = useState('');
+  const [prazo, setPrazo] = useState('');
 
-  // --- mapa id->nome para ajudar quando o grupo vem só com ID ---
-  const idToName = useMemo(() => {
-    const m = new Map();
-    (data?.administradoras || []).forEach(a => {
-      if (a?.id) m.set(String(a.id), String(a.nome || ''));
-    });
-    return m;
-  }, [data]);
-
-  // --- derivar ADMIN options a partir dos grupos+administradoras ---
+  // Opções de Administradora (usando o campo pré-processado __adminKey)
   const adminOptions = useMemo(() => {
-    const map = new Map(); // key -> label
+    const map = new Map(); // key -> label (label original “bonito” extraído do grupo)
     (data?.grupos || []).forEach(g => {
-      const label = g?.nomeAdministradora || idToName.get(String(g?.administradoraId)) || '';
-      if (!label) return;
-      const key = N(label);
-      if (!map.has(key)) map.set(key, label);
+      const key = g.__adminKey;
+      const label = g?.nomeAdministradora || g?.administradoraId || key;
+      if (key && !map.has(key)) map.set(key, label);
     });
     (data?.administradoras || []).forEach(a => {
       const key = N(a?.nome || '');
-      const label = a?.nome || '';
+      const label = a?.nome || key;
+      if (key && !map.has(key)) map.set(key, label);
+    });
+    return Array.from(map.entries())
+      .map(([value, label]) => ({ value, label }))
+      .sort((a,b)=> String(a.label).localeCompare(String(b.label), 'pt-BR'));
+  }, [data]);
+
+  // Opções de Produto: DEPENDENTES da administradora (se selecionada)
+  const productOptions = useMemo(() => {
+    const map = new Map(); // key -> label amigável
+    (data?.grupos || []).forEach(g => {
+      if (adminKey && g.__adminKey !== adminKey) return; // dependente!
+      const key = g.__productKey;
+      const label = toTitle(String(g?.produto || key).replace(/_/g,' '));
       if (key && !map.has(key)) map.set(key, label);
     });
     return Array.from(map.entries())
       .map(([value, label]) => ({ value, label }))
       .sort((a,b)=> a.label.localeCompare(b.label, 'pt-BR'));
-  }, [data, idToName]);
+  }, [data, adminKey]);
 
-  // --- derivar PRODUTO options dinamicamente (sem codar sinônimos) ---
-  const productOptions = useMemo(() => {
-    const map = new Map(); // key -> label
-    (data?.grupos || []).forEach(g => {
-      const key = slugKey(g?.produto);
-      const label = toTitle(String(g?.produto || key).replace(/_/g,' '));
-      if (!map.has(key)) map.set(key, label);
-    });
-    return Array.from(map.entries())
-      .map(([value, label]) => ({ value, label }))
-      .sort((a,b)=> a.label.localeCompare(b.label, 'pt-BR'));
-  }, [data]);
+  // Limpa dependentes quando muda ADM
+  useEffect(() => { setProductKey(''); setTipoKey(''); }, [adminKey]);
 
-  // --- propaga filtros sempre que mudam ---
-  useEffect(() => {
+  // Propaga filtros
+  useEffect(()=>{
     const min   = parseBRLToNumber(minCartaMasked);
     const max   = parseBRLToNumber(maxCartaMasked);
     const lance = (lanceMin === '' ? undefined : parseFloat(lanceMin));
@@ -102,7 +92,7 @@ export default function Filters({ data, onFilterChange }){
     });
   }, [minCartaMasked, maxCartaMasked, adminKey, productKey, tipoKey, lanceMin, prazo, onFilterChange]);
 
-  // --- limpar tudo ---
+  // Zerar tudo
   const clearAll = () => {
     setMinCartaMasked('');
     setMaxCartaMasked('');
