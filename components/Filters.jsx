@@ -15,7 +15,6 @@ function toTitle(s){
     .toLowerCase()
     .replace(/(^|[\s_-])([a-zà-ú])/g, (_,p,c)=> p + c.toUpperCase());
 }
-
 function maskBRL(input) {
   const digits = String(input || '').replace(/\D/g, '');
   if (!digits) return '';
@@ -28,9 +27,7 @@ function parseBRLToNumber(masked) {
   return parseInt(digits, 10) / 100;
 }
 
-/* ========= Componente ========= */
 export default function Filters({ data, onFilterChange }){
-  // Inputs
   const [minCartaMasked, setMinCartaMasked] = useState('');
   const [maxCartaMasked, setMaxCartaMasked] = useState('');
   const [adminKey, setAdminKey] = useState('');
@@ -39,9 +36,9 @@ export default function Filters({ data, onFilterChange }){
   const [lanceMin, setLanceMin] = useState('');
   const [prazo, setPrazo] = useState('');
 
-  // Opções de Administradora (usando o campo pré-processado __adminKey)
+  // Admin options a partir dos grupos pré-processados
   const adminOptions = useMemo(() => {
-    const map = new Map(); // key -> label (label original “bonito” extraído do grupo)
+    const map = new Map();
     (data?.grupos || []).forEach(g => {
       const key = g.__adminKey;
       const label = g?.nomeAdministradora || g?.administradoraId || key;
@@ -57,11 +54,11 @@ export default function Filters({ data, onFilterChange }){
       .sort((a,b)=> String(a.label).localeCompare(String(b.label), 'pt-BR'));
   }, [data]);
 
-  // Opções de Produto: DEPENDENTES da administradora (se selecionada)
+  // Produto DEPENDE da admin selecionada (usa __productKey)
   const productOptions = useMemo(() => {
-    const map = new Map(); // key -> label amigável
+    const map = new Map();
     (data?.grupos || []).forEach(g => {
-      if (adminKey && g.__adminKey !== adminKey) return; // dependente!
+      if (adminKey && g.__adminKey !== adminKey) return;
       const key = g.__productKey;
       const label = toTitle(String(g?.produto || key).replace(/_/g,' '));
       if (key && !map.has(key)) map.set(key, label);
@@ -71,28 +68,26 @@ export default function Filters({ data, onFilterChange }){
       .sort((a,b)=> a.label.localeCompare(b.label, 'pt-BR'));
   }, [data, adminKey]);
 
-  // Limpa dependentes quando muda ADM
+  // Ao trocar admin, limpa dependentes
   useEffect(() => { setProductKey(''); setTipoKey(''); }, [adminKey]);
 
-  // Propaga filtros
+  // Propaga filtros — **ATENÇÃO aos nomes productKey/tipoKey**
   useEffect(()=>{
     const min   = parseBRLToNumber(minCartaMasked);
     const max   = parseBRLToNumber(maxCartaMasked);
     const lance = (lanceMin === '' ? undefined : parseFloat(lanceMin));
     const pz    = (prazo === '' ? undefined : parseInt(prazo, 10));
-
     onFilterChange({
-  minCarta: Number.isNaN(min) ? undefined : min,
-  maxCarta: Number.isNaN(max) ? undefined : max,
-  adminKey: adminKey || '',
-  productKey: productKey || '',   // ← aqui TEM que ser productKey
-  tipoKey: N(tipoKey || ''),      // ← e tipoKey
-  lanceMin: Number.isNaN(lance) ? undefined : lance,
-  prazo: Number.isNaN(pz) ? undefined : pz
-});
+      minCarta: Number.isNaN(min) ? undefined : min,
+      maxCarta: Number.isNaN(max) ? undefined : max,
+      adminKey: adminKey || '',
+      productKey: productKey || '',
+      tipoKey: N(tipoKey || ''),
+      lanceMin: Number.isNaN(lance) ? undefined : lance,
+      prazo: Number.isNaN(pz) ? undefined : pz
+    });
   }, [minCartaMasked, maxCartaMasked, adminKey, productKey, tipoKey, lanceMin, prazo, onFilterChange]);
 
-  // Zerar tudo
   const clearAll = () => {
     setMinCartaMasked('');
     setMaxCartaMasked('');
@@ -113,7 +108,6 @@ export default function Filters({ data, onFilterChange }){
           className="w-full border rounded-2xl px-3 py-2"
         />
       </div>
-
       <div>
         <label className="block text-xs text-gray-600 mb-1">Valor Carta Máx (R$)</label>
         <input
@@ -122,7 +116,6 @@ export default function Filters({ data, onFilterChange }){
           className="w-full border rounded-2xl px-3 py-2"
         />
       </div>
-
       <div>
         <label className="block text-xs text-gray-600 mb-1">Administradora</label>
         <select value={adminKey} onChange={(e)=> setAdminKey(e.target.value)} className="w-full border rounded-2xl px-3 py-2">
@@ -130,7 +123,6 @@ export default function Filters({ data, onFilterChange }){
           {adminOptions.map(opt => (<option key={opt.value} value={opt.value}>{opt.label}</option>))}
         </select>
       </div>
-
       <div>
         <label className="block text-xs text-gray-600 mb-1">% Lance Mínimo</label>
         <input
@@ -139,7 +131,6 @@ export default function Filters({ data, onFilterChange }){
           className="w-full border rounded-2xl px-3 py-2"
         />
       </div>
-
       <div>
         <label className="block text-xs text-gray-600 mb-1">Produto</label>
         <select value={productKey} onChange={(e)=> setProductKey(e.target.value)} className="w-full border rounded-2xl px-3 py-2">
@@ -147,7 +138,6 @@ export default function Filters({ data, onFilterChange }){
           {productOptions.map(opt => (<option key={opt.value} value={opt.value}>{opt.label}</option>))}
         </select>
       </div>
-
       <div>
         <label className="block text-xs text-gray-600 mb-1">Tipo de Grupo</label>
         <select value={tipoKey} onChange={(e)=> setTipoKey(e.target.value)} className="w-full border rounded-2xl px-3 py-2">
@@ -156,7 +146,6 @@ export default function Filters({ data, onFilterChange }){
           <option value={N('PARCELA REDUZIDA')}>PARCELA REDUZIDA</option>
         </select>
       </div>
-
       <div>
         <label className="block text-xs text-gray-600 mb-1">Prazo (meses)</label>
         <input
@@ -164,7 +153,6 @@ export default function Filters({ data, onFilterChange }){
           inputMode="numeric" className="w-full border rounded-2xl px-3 py-2"
         />
       </div>
-
       <div className="col-span-2 md:col-span-3 lg:col-span-6 flex justify-end">
         <button onClick={clearAll} className="px-4 py-2 rounded-2xl border hover:bg-gray-50">
           Limpar filtros
