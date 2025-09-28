@@ -1,13 +1,9 @@
 'use client';
 
-// Desliga cache/prerender nessa rota (evita erros no build)
-export const dynamic = 'force-dynamic';
-export const revalidate = 0;
-export const fetchCache = 'force-no-store';
+export const dynamic = 'force-dynamic'; // evita prerender/ISR nessa página
 
 import { useEffect, useMemo, useState } from 'react';
 
-/** Junta vários datasets do /public/data */
 function mergeDatasets(list) {
   const admMap = new Map();
   const grupos = [];
@@ -79,7 +75,6 @@ export default function ComparePage() {
 
   useEffect(() => {
     let alive = true;
-
     (async () => {
       try {
         const man = await fetch('/data/_manifest.json', { cache: 'no-store' }).then(r => r.json());
@@ -93,7 +88,6 @@ export default function ComparePage() {
       }
     })();
 
-    // recuperar seleção do localStorage
     try {
       const raw = localStorage.getItem('compareSelection');
       if (raw) setSelectedIds(JSON.parse(raw));
@@ -104,7 +98,7 @@ export default function ComparePage() {
 
   const selected = useMemo(() => {
     const set = new Set(selectedIds);
-    return (data.grupos || []).filter(g => set.has(g.id)).slice(0, 4); // até 4 itens
+    return (data.grupos || []).filter(g => set.has(g.id)).slice(0, 4);
   }, [data, selectedIds]);
 
   return (
