@@ -82,14 +82,14 @@ export default function Filters({ data, onFilterChange }){
     const pz    = (prazo === '' ? undefined : parseInt(prazo, 10));
 
     onFilterChange({
-      minCarta: Number.isNaN(min) ? undefined : min,
-      maxCarta: Number.isNaN(max) ? undefined : max,
-      adminKey: adminKey || '',
-      productKey: productKey || '',
-      tipoKey: N(tipoKey || ''),
-      lanceMin: Number.isNaN(lance) ? undefined : lance,
-      prazo: Number.isNaN(pz) ? undefined : pz
-    });
+  minCarta: Number.isNaN(min) ? undefined : min,
+  maxCarta: Number.isNaN(max) ? undefined : max,
+  adminKey: adminKey || '',
+  productKey: productKey || '',   // ← aqui TEM que ser productKey
+  tipoKey: N(tipoKey || ''),      // ← e tipoKey
+  lanceMin: Number.isNaN(lance) ? undefined : lance,
+  prazo: Number.isNaN(pz) ? undefined : pz
+});
   }, [minCartaMasked, maxCartaMasked, adminKey, productKey, tipoKey, lanceMin, prazo, onFilterChange]);
 
   // Zerar tudo
