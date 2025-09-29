@@ -1,11 +1,11 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import Filters from "../../Filters";
-import GroupCard from "../../GroupCard";
-import CompareBar from "../../CompareBar";
+import Filters from "@/Filters";
+import GroupCard from "@/GroupCard";
+import CompareBar from "@/CompareBar";
 
-/* ====== (mesma infra do /) ====== */
+/* ====== infra compartilhada ====== */
 const N = (v) =>
   String(v ?? "")
     .normalize("NFD")
@@ -96,7 +96,7 @@ export default function Page() {
   const [error, setError] = useState("");
   const [isLoading, setLoading] = useState(true);
   const [filters, setFilters] = useState({});
-  const [selected, setSelected] = useState([]); // grupos selecionados
+  const [selected, setSelected] = useState([]);
 
   useEffect(() => {
     let alive = true;
@@ -142,9 +142,9 @@ export default function Page() {
       <CompareBar selected={selected} />
 
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-        {grupos.map((g, idx) => (
+        {grupos.map((g) => (
           <GroupCard
-            key={g.__groupKey ?? idx}
+            key={g.__groupKey}
             group={{
               ...g,
               nomeAdministradora: g.__adminName || g.nomeAdministradora,
