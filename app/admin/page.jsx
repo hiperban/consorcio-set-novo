@@ -1,6 +1,6 @@
 "use client";
 
-import AdminForm from "@/AdminForm";
+import AdminForm from "../../AdminForm";
 
 export default function Page() {
   const adminKey = process.env.NEXT_PUBLIC_ADMIN_KEY;
@@ -10,7 +10,7 @@ export default function Page() {
       <div className="p-6">
         <h1 className="text-xl font-bold">Admin</h1>
         <p className="text-red-600">
-          Erro: NEXT_PUBLIC_ADMIN_KEY não está definido nas variáveis de ambiente.
+          Erro: defina a variável NEXT_PUBLIC_ADMIN_KEY nas variáveis do Vercel.
         </p>
       </div>
     );
