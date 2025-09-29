@@ -1,10 +1,10 @@
 'use client';
 export const dynamic = 'force-dynamic';
 
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useState } from 'react';
 import AdminForm from '@/components/AdminForm';
 
-/* ----- Helpers ----- */
+/* Helpers */
 function N(v) {
   return String(v ?? '')
     .normalize('NFD')
@@ -12,115 +12,99 @@ function N(v) {
     .trim();
 }
 
-/* Junta datasets */
+/* Junta datasets com sanitização */
 function mergeDatasets(list) {
   const admMap = new Map();
   const grupos = [];
   for (const d of list || []) {
     const adms = Array.isArray(d?.administradoras) ? d.administradoras : [];
     const gs   = Array.isArray(d?.grupos) ? d.grupos : [];
-    adms.forEach(a => { if (a?.id && !admMap.has(a.id)) admMap.set(a.id, a); });
-    gs.forEach(g => grupos.push(g));
+
+    adms.forEach(a => {
+      const id = String(a?.id || '').trim();
+      const nome = String(a?.nome || '').trim();
+      if (id && !admMap.has(id)) admMap.set(id, { id, nome });
+    });
+
+    gs.forEach(g => {
+      const id = String(g?.id || '').trim();
+      const administradoraId = String(g?.administradoraId || '').trim();
+      const produto = String(g?.produto || '').trim();
+      if (!id || !administradoraId || !produto) return;
+
+      grupos.push({
+        ...g,
+        id,
+        administradoraId,
+        produto,
+        tipoGrupo: String(g?.tipoGrupo || '').trim(),
+        valorCarta: Number(g?.valorCarta ?? 0),
+        valorParcela: Number(g?.valorParcela ?? 0),
+        taxaAdm: Number(g?.taxaAdm ?? 0),
+        lanceMedio: Number(g?.lanceMedio ?? 0),
+        prazo: Number(g?.prazo ?? 0),
+      });
+    });
   }
   return { administradoras: Array.from(admMap.values()), grupos };
 }
 
 export default function AdminPage() {
   const [data, setData] = useState({ administradoras: [], grupos: [] });
-  const [auth, setAuth] = useState(false);
-  const [envKeyMissing, setEnvKeyMissing] = useState(false);
+  const [error, setError] = useState('');
 
-  // ---------- AUTH ROBUSTO ----------
   useEffect(() => {
-    const expectedRaw = process.env.NEXT_PUBLIC_ADMIN_KEY;
-    const expected = (expectedRaw ?? '').trim();
-    if (!expected) {
-      setEnvKeyMissing(true);
-      setAuth(false);
-      return;
-    }
-    setEnvKeyMissing(false);
+    async function loadAll() {
+      try {
+        setError('');
+        const man = await fetch('/data/_manifest.json', { cache: 'no-store' }).then(r => r.json());
+        const files = Array.isArray(man?.datasets) ? man.datasets : [];
 
-    try {
-      const url = new URL(window.location.href);
-      const qKeyRaw = url.searchParams.get('key');
-      const qKey = qKeyRaw ? decodeURIComponent(qKeyRaw).trim() : '';
+        const results = await Promise.allSettled(
+          files.map(f =>
+            fetch(`/data/${f}`, { cache: 'no-store' })
+              .then(r => {
+                if (!r.ok) throw new Error(`Falha ao baixar ${f}: ${r.status}`);
+                return r.json();
+              })
+              .then(j => ({ file: f, data: j }))
+          )
+        );
 
-      // Se veio key via URL e bate, gravo e tiro da URL
-      if (qKey && qKey === expected) {
-        localStorage.setItem('admin_auth_key', expected);
-        // Remove ?key= da URL sem recarregar
-        url.searchParams.delete('key');
-        window.history.replaceState({}, '', url.toString());
-        setAuth(true);
-        return;
+        const ok = results
+          .filter(r => r.status === 'fulfilled')
+          .map(r => r.value.data);
+
+        const rejected = results.filter(r => r.status === 'rejected');
+        if (rejected.length) {
+          setError(`Alguns arquivos foram ignorados: ${rejected.length}. Veja o console para detalhes.`);
+          rejected.forEach(r => console.warn('[Dataset ignorado]', r.reason));
+        }
+
+        setData(mergeDatasets(ok));
+      } catch (e) {
+        console.error(e);
+        setError('Não foi possível carregar os dados.');
+        setData({ administradoras: [], grupos: [] });
       }
-
-      // Se não veio key agora, checo localStorage
-      const saved = (localStorage.getItem('admin_auth_key') || '').trim();
-      setAuth(saved === expected);
-    } catch (e) {
-      setAuth(false);
     }
+    loadAll();
   }, []);
 
-  // ---------- CARREGA DADOS ----------
-  useEffect(() => {
-   async function loadAll() {
-  try {
-    const man = await fetch('/data/_manifest.json', { cache: 'no-store' }).then(r => r.json());
-    const files = Array.isArray(man?.datasets) ? man.datasets : [];
-
-    const results = await Promise.allSettled(
-      files.map(f =>
-        fetch(`/data/${f}`, { cache: 'no-store' })
-          .then(r => {
-            if (!r.ok) throw new Error(`Falha ao baixar ${f}: ${r.status}`);
-            return r.json();
-          })
-          .then(j => ({ file: f, data: j }))
-      )
-    );
-
-    const ok = results
-      .filter(r => r.status === 'fulfilled')
-      .map(r => r.value.data);
-
-    // Log gentil de problemas, mas sem quebrar a UI
-    results
-      .filter(r => r.status === 'rejected')
-      .forEach(r => console.warn('[Dataset ignorado]', r.reason));
-
-    setData(mergeDatasets(ok));
-  } catch (e) {
-    console.error('Erro ao carregar datasets:', e);
-    setData({ administradoras: [], grupos: [] });
-  }
-  }, []);
-
-  // ---------- UI ----------
-  if (envKeyMissing) {
+  if (error) {
     return (
-      <main className="container py-6">
-        <div className="card space-y-2">
-          <h1 className="text-lg font-semibold">Acesso restrito</h1>
-          <p className="text-sm text-gray-700">
-            Defina a variável <code>NEXT_PUBLIC_ADMIN_KEY</code> no Vercel (Project → Settings → Environment Variables),
-            redeploy e acesse <code>/admin?key=SUA_CHAVE</code>.
+      <main className="container py-6 space-y-6">
+        <h1 className="text-2xl font-semibold text-brand-800">Admin</h1>
+        <div className="p-4 border rounded-2xl bg-yellow-50 text-yellow-800">
+          <p className="font-medium mb-1">Aviso</p>
+          <p className="text-sm">{error}</p>
+          <p className="text-sm mt-2">
+            Dica: valide a estrutura do JSON novo (administradoras[], grupos[]) e campos obrigatórios.
           </p>
-        </div>
-      </main>
-    );
-  }
-
-  if (!auth) {
-    return (
-      <main className="container py-6">
-        <div className="card space-y-4">
-          <h1 className="text-lg font-semibold">Autenticação necessária</h1>
-          <ol className="list-decimal pl-5 text-sm text-gray-700 space-y-1">
-            <li>Confirme a sua chave em <b>Vercel → Project → Settings → Environment Variables</b> como <code>NEXT_PUBLIC_ADMIN_KEY</code>.</li>
-            <li>Acesse: <code>/admin?key=SUA_CHAVE</code>. Ex.: <code>/admin?key=abc123</code></li>
+          <ol className="list-decimal ml-4 text-sm mt-2 space-y-1">
+            <li>Inclua <code>administradoras</code> com <code>id</code> e <code>nome</code>.</li>
+            <li>Nos <code>grupos</code>, garanta: <code>id</code>, <code>administradoraId</code>, <code>produto</code>, <code>valorCarta</code>, <code>valorParcela</code>, <code>prazo</code>.</li>
+            <li>Atualize <code>_manifest.json</code> adicionando o arquivo em <code>datasets</code>.</li>
             <li>Evite espaços ou caracteres especiais na chave. Use letras/números simples.</li>
           </ol>
         </div>
