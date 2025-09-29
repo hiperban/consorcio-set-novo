@@ -39,20 +39,45 @@ function intLoose(v){
 
 /* Carrega e junta datasets */
 async function loadAllDatasets() {
-  const man = await fetch('/data/_manifest.json', { cache:'no-store' }).then(r=>r.json());
+  // Tenta baixar o manifesto
+  let man;
+  try {
+    const r = await fetch('/data/_manifest.json', { cache:'no-store' });
+    if (!r.ok) {
+      console.error('[data] 404/_manifest.json não encontrado', r.status, r.statusText);
+      return { administradoras: [], grupos: [] };
+    }
+    man = await r.json();
+  } catch (e) {
+    console.error('[data] erro lendo _manifest.json', e);
+    return { administradoras: [], grupos: [] };
+  }
+
   const files = Array.isArray(man?.datasets) ? man.datasets : [];
-  const datasets = await Promise.all(files.map(f => fetch(`/data/${f}`, { cache:'no-store' }).then(r=>r.json())));
   const grupos = [];
   const admMap = new Map(); // id -> {id,nome}
-  for (const d of datasets) {
-    (d?.administradoras || []).forEach(a => { if (a?.id && !admMap.has(String(a.id))) admMap.set(String(a.id), a); });
-    (d?.grupos || []).forEach(g => grupos.push(g));
+
+  // Busca cada dataset, mas se algum 404, loga e continua
+  for (const fRaw of files) {
+    const f = String(fRaw || '').trim().replace(/^\/+/, '');
+    if (!f) continue;
+    const url = `/data/${encodeURIComponent(f)}`;
+    try {
+      const r = await fetch(url, { cache:'no-store' });
+      if (!r.ok) {
+        console.warn('[data] 404 ao carregar dataset:', url, r.status, r.statusText);
+        continue;
+      }
+      const d = await r.json();
+      (d?.administradoras || []).forEach(a => { if (a?.id && !admMap.has(String(a.id))) admMap.set(String(a.id), a); });
+      (d?.grupos || []).forEach(g => grupos.push(g));
+    } catch (e) {
+      console.warn('[data] erro ao ler dataset:', url, e);
+    }
   }
+
+  console.debug('[data] carregado:', { datasets: files.length, administradoras: admMap.size, grupos: grupos.length });
   return { administradoras: Array.from(admMap.values()), grupos };
-}
-function adminNameForGroup(g, admById) {
-  const byId = g?.administradoraId ? admById.get(String(g.administradoraId))?.nome : '';
-  return byId || g?.nomeAdministradora || '';
 }
 
 export default function Home() {
