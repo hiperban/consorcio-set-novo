@@ -1,102 +1,23 @@
 'use client';
 export const dynamic = 'force-dynamic';
 
-import { Suspense, useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 
-/** Junta vários datasets do /public/data */
+/* Helpers */
+function N(v) {
+  return String(v ?? '')
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .trim()
+    .toUpperCase();
+}
+function toTitle(s) {
+  return String(s || '')
+    .toLowerCase()
+    .replace(/(^|[\s_-])([a-zà-ú])/g, (_, p, c) => p + c.toUpperCase());
+}
+
+/** Junta vários datasets do /public/data com sanitização */
 function mergeDatasets(list) {
   const admMap = new Map();
-  const grupos = [];
-  for (const d of list) {
-    (d?.administradoras || []).forEach(a => { if (!admMap.has(a.id)) admMap.set(a.id, a); });
-    (d?.grupos || []).forEach(g => grupos.push(g));
-  }
-  return { administradoras: Array.from(admMap.values()), grupos };
-}
-
-function Table({ selected, all }) {
-  const rows = [
-    ['Grupo', g => g.numeroGrupo],
-    ['Administradora', g => g.nomeAdministradora],
-    ['Produto', g => g.produto],
-    ['Tipo de Grupo', g => g.tipoGrupo],
-    ['Valor Carta', g => (g.valorCarta ?? 0).toLocaleString('pt-BR', { style:'currency', currency:'BRL' })],
-    ['Parcela', g => (g.valorParcela ?? 0).toLocaleString('pt-BR', { style:'currency', currency:'BRL' })],
-    ['Taxa Adm', g => `${g.taxaAdm}%`],
-    ['% Lance Médio', g => `${g.lanceMedio}%`],
-    ['% Lance Embutido', g => `${g.lanceEmbutidoPermite}%`],
-    ['Participantes', g => g.totalParticipantes],
-    ['Prazo (meses)', g => g.prazo],
-    ['Assembleia (dia)', g => g.diaAssembleia],
-  ];
-
-  return (
-    <div className="card overflow-auto">
-      <table className="min-w-full text-sm">
-        <thead>
-          <tr>
-            <th className="text-left p-3 w-48">Campo</th>
-            {selected.map(g => (
-              <th key={g.id} className="text-left p-3">{g.nomeAdministradora} #{g.numeroGrupo}</th>
-            ))}
-          </tr>
-        </thead>
-        <tbody>
-          {rows.map(([label,get])=>(
-            <tr key={label} className="border-t">
-              <td className="p-3 text-gray-600">{label}</td>
-              {selected.map(g=>(
-                <td key={g.id+label} className="p-3 font-medium">{get(g)}</td>
-              ))}
-            </tr>
-          ))}
-        </tbody>
-      </table>
-    </div>
-  );
-}
-
-export default function ComparePage() {
-  const [data, setData] = useState({ administradoras: [], grupos: [] });
-  const [selectedIds, setSelectedIds] = useState([]);
-
-  useEffect(() => {
-    async function loadAll() {
-      try {
-        const man = await fetch('/data/_manifest.json', { cache: 'no-store' }).then(r => r.json());
-        const files = Array.isArray(man.datasets) ? man.datasets : [];
-        const datasets = await Promise.all(
-          files.map(f => fetch(`/data/${f}`, { cache: 'no-store' }).then(r => r.json()))
-        );
-        setData(mergeDatasets(datasets));
-      } catch {
-        setData({ administradoras: [], grupos: [] });
-      }
-    }
-    loadAll();
-
-    // tentar recuperar seleção do localStorage
-    try {
-      const raw = localStorage.getItem('compareSelection');
-      if (raw) setSelectedIds(JSON.parse(raw));
-    } catch {}
-  }, []);
-
-  const selected = useMemo(() => {
-    const set = new Set(selectedIds);
-    return (data.grupos || []).filter(g => set.has(g.id)).slice(0, 4); // até 4 itens
-  }, [data, selectedIds]);
-
-  return (
-    <main className="container py-6 space-y-6">
-      <header>
-        <h1 className="text-2xl font-semibold text-brand-800">Comparar Grupos</h1>
-        <p className="text-sm text-gray-600">Tabela lado a lado com até 4 grupos.</p>
-      </header>
-
-      <Suspense>
-        <Table selected={selected} all={data.grupos||[]} />
-      </Suspense>
-    </main>
-  );
-}
+  const g
