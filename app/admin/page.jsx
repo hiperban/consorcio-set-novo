@@ -1,6 +1,6 @@
 "use client";
 
-import AdminForm from "../../AdminForm";
+import AdminForm from "@/AdminForm";
 
 export default function Page() {
   const adminKey = process.env.NEXT_PUBLIC_ADMIN_KEY;
