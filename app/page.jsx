@@ -174,5 +174,57 @@ export default function Home() {
     });
   }, [filters, data, administradorasMap, prodMap]);
 
+  /* ---------- seleção para comparar ---------- */
   const selected = useMemo(() => {
-    const set = new Set(
+    const set = new Set(selectedIds);
+    return (data.grupos || []).filter(g => set.has(g.id)).slice(0, 4);
+  }, [selectedIds, data]);
+
+  const onToggleCompare = (id) => {
+    setSelectedIds(prev => {
+      const set = new Set(prev);
+      if (set.has(id)) set.delete(id);
+      else if (set.size < 4) set.add(id);
+      const arr = Array.from(set);
+      try { localStorage.setItem('compareSelection', JSON.stringify(arr)); } catch {}
+      return arr;
+    });
+  };
+
+  return (
+    <main className="container py-6 space-y-6">
+      <header>
+        <h1 className="text-2xl font-semibold text-brand-800">Simulador de Consórcio</h1>
+        <p className="text-sm text-gray-600">Filtros dinâmicos, visual moderno e contratação direta.</p>
+      </header>
+
+      <Filters data={data} onFilterChange={setFilters} />
+
+      <div className="grid gap-6 [grid-template-columns:repeat(auto-fit,minmax(404px,1fr))]">
+        {filtered.map(g => (
+          <GroupCard
+            key={g.id}
+            group={g}
+            administradoraName={administradorasMap.get(String(g.administradoraId))?.nome || g?.nomeAdministradora || ''}
+            productLabel={prodMap.labels[productKey(g?.produto)] || toTitle(g?.produto)}
+            inCompare={selectedIds.includes(g.id)}
+            onToggleCompare={() => onToggleCompare(g.id)}
+          />
+        ))}
+      </div>
+
+      {selected.length > 0 && (
+        <section className="sticky bottom-4 bg-white border rounded-2xl shadow p-4">
+          <h2 className="font-medium mb-2">Selecionados para comparar ({selected.length}/4)</h2>
+          <div className="flex gap-3 flex-wrap">
+            {selected.map(s => (
+              <span key={s.id} className="text-xs border rounded-full px-3 py-1">
+                #{s.numeroGrupo || s.id} — {toTitle(s.produto)}
+              </span>
+            ))}
+          </div>
+        </section>
+      )}
+    </main>
+  );
+}
