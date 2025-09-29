@@ -1,7 +1,7 @@
 'use client';
 import { useMemo, useState } from 'react';
 
-/* Helpers para chaves canônicas */
+/* Normaliza textos para CHAVES CANÔNICAS 1:1 */
 function N(v){
   return String(v ?? '')
     .normalize('NFD')
@@ -22,6 +22,7 @@ function toTitle(s){
 }
 
 export default function Filters({ data, onApply }){
+  // Estados do formulário (sempre valores canônicos nas chaves)
   const [minCarta, setMinCarta] = useState('');
   const [maxCarta, setMaxCarta] = useState('');
   const [adminKey, setAdminKey] = useState('');
@@ -30,17 +31,12 @@ export default function Filters({ data, onApply }){
   const [lanceMin, setLanceMin] = useState('');
   const [prazo, setPrazo] = useState('');
 
-  // Admins: value = __adminKey, label = nome
+  // Administradoras vindas dos grupos (garante refletir o que existe de fato)
   const adminOptions = useMemo(() => {
-    const m = new Map();
+    const m = new Map(); // key -> label
     (data?.grupos || []).forEach(g => {
       const key = g.__adminKey;
       const label = g.__adminName || g.nomeAdministradora || key;
-      if (key && !m.has(key)) m.set(key, label);
-    });
-    (data?.administradoras || []).forEach(a => {
-      const key = N(a?.nome || '');
-      const label = a?.nome || key;
       if (key && !m.has(key)) m.set(key, label);
     });
     return Array.from(m.entries())
@@ -48,9 +44,9 @@ export default function Filters({ data, onApply }){
       .sort((a,b)=> String(a.label).localeCompare(String(b.label),'pt-BR'));
   }, [data]);
 
-  // Produtos dependem da admin escolhida
+  // Produtos dependentes da administradora selecionada
   const productOptions = useMemo(() => {
-    const m = new Map();
+    const m = new Map(); // key -> label
     (data?.grupos || []).forEach(g => {
       if (adminKey && g.__adminKey !== adminKey) return;
       const key = g.__productKey;
@@ -62,8 +58,8 @@ export default function Filters({ data, onApply }){
       .sort((a,b)=> a.label.localeCompare(b.label,'pt-BR'));
   }, [data, adminKey]);
 
-  const aplicar = () => {
-    const payload = {
+  function aplicar(){
+    onApply({
       minCarta: minCarta ? parseFloat(minCarta) : undefined,
       maxCarta: maxCarta ? parseFloat(maxCarta) : undefined,
       adminKey: adminKey || '',
@@ -71,27 +67,24 @@ export default function Filters({ data, onApply }){
       tipoKey: tipoKey || '',
       lanceMin: lanceMin ? parseFloat(lanceMin) : undefined,
       prazo: prazo ? parseInt(prazo,10) : undefined,
-    };
-    console.debug('[Filters] onApply ->', payload);
-    onApply(payload);
-  };
-
-  const limpar = () => {
+    });
+  }
+  function limpar(){
     setMinCarta(''); setMaxCarta('');
     setAdminKey(''); setProductKey('');
     setTipoKey(''); setLanceMin(''); setPrazo('');
     onApply({});
-  };
+  }
 
   return (
     <div className="card grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3">
       <div>
-        <label className="block text-xs text-gray-600 mb-1">Valor Carta Mín</label>
-        <input value={minCarta} onChange={e=>setMinCarta(e.target.value)} placeholder="ex.: 5000" className="w-full border rounded-2xl px-3 py-2"/>
+        <label className="block text-xs text-gray-600 mb-1">Valor Carta Mín (R$)</label>
+        <input value={minCarta} onChange={e=>setMinCarta(e.target.value)} inputMode="numeric" className="w-full border rounded-2xl px-3 py-2" />
       </div>
       <div>
-        <label className="block text-xs text-gray-600 mb-1">Valor Carta Máx</label>
-        <input value={maxCarta} onChange={e=>setMaxCarta(e.target.value)} placeholder="ex.: 50000" className="w-full border rounded-2xl px-3 py-2"/>
+        <label className="block text-xs text-gray-600 mb-1">Valor Carta Máx (R$)</label>
+        <input value={maxCarta} onChange={e=>setMaxCarta(e.target.value)} inputMode="numeric" className="w-full border rounded-2xl px-3 py-2" />
       </div>
 
       <div>
@@ -129,11 +122,12 @@ export default function Filters({ data, onApply }){
 
       <div>
         <label className="block text-xs text-gray-600 mb-1">% Lance Mínimo</label>
-        <input value={lanceMin} onChange={e=>setLanceMin(e.target.value)} placeholder="ex.: 20" className="w-full border rounded-2xl px-3 py-2"/>
+        <input value={lanceMin} onChange={e=>setLanceMin(e.target.value)} inputMode="numeric" placeholder="ex.: 20" className="w-full border rounded-2xl px-3 py-2" />
       </div>
+
       <div>
         <label className="block text-xs text-gray-600 mb-1">Prazo (meses)</label>
-        <input value={prazo} onChange={e=>setPrazo(e.target.value)} placeholder="ex.: 96" className="w-full border rounded-2xl px-3 py-2"/>
+        <input value={prazo} onChange={e=>setPrazo(e.target.value)} inputMode="numeric" placeholder="ex.: 60" className="w-full border rounded-2xl px-3 py-2" />
       </div>
 
       <div className="col-span-full flex justify-end gap-2">
