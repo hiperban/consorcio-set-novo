@@ -1,0 +1,90 @@
+{
+  "administradoras": [
+    {
+      "id": "1",
+      "nome": "RODOBENS"
+    }
+  ],
+  "grupos": [
+    {
+      "id": "1",
+      "numeroGrupo": "090120",
+      "administradoraId": "1",
+      "produto": "REFORMAS",
+      "tipoGrupo": "PARCELA INTEGRAL",
+      "valorCarta": 18000,
+      "valorParcela": 508.96,
+      "taxaAdm": 26.5,
+      "lanceMedio": 0,
+      "lanceEmbutidoPermite": 10,
+      "totalParticipantes": 200,
+      "diaAssembleia": " 14",
+      "prazo": 48,
+      "nomeAdministradora": "RODOBENS"
+    },
+    {
+      "id": "G-090120-1759171424624",
+      "numeroGrupo": "090120",
+      "administradoraId": "1",
+      "produto": "REFORMAS",
+      "tipoGrupo": "PARCELA INTEGRAL",
+      "valorCarta": 17000,
+      "valorParcela": 480.69,
+      "taxaAdm": 26.5,
+      "lanceMedio": 0,
+      "lanceEmbutidoPermite": 10,
+      "totalParticipantes": 200,
+      "diaAssembleia": " 14",
+      "prazo": 48,
+      "nomeAdministradora": "RODOBENS"
+    },
+    {
+      "id": "G-090120-1759171434319",
+      "numeroGrupo": "090120",
+      "administradoraId": "1",
+      "produto": "REFORMAS",
+      "tipoGrupo": "PARCELA INTEGRAL",
+      "valorCarta": 16000,
+      "valorParcela": 452.41,
+      "taxaAdm": 26.5,
+      "lanceMedio": 0,
+      "lanceEmbutidoPermite": 10,
+      "totalParticipantes": 200,
+      "diaAssembleia": " 14",
+      "prazo": 48,
+      "nomeAdministradora": "RODOBENS"
+    },
+    {
+      "id": "G-090120-1759171443889",
+      "numeroGrupo": "090120",
+      "administradoraId": "1",
+      "produto": "REFORMAS",
+      "tipoGrupo": "PARCELA INTEGRAL",
+      "valorCarta": 15000,
+      "valorParcela": 424.14,
+      "taxaAdm": 26.5,
+      "lanceMedio": 0,
+      "lanceEmbutidoPermite": 10,
+      "totalParticipantes": 200,
+      "diaAssembleia": " 14",
+      "prazo": 48,
+      "nomeAdministradora": "RODOBENS"
+    },
+    {
+      "id": "G-090120-1759171453016",
+      "numeroGrupo": "090120",
+      "administradoraId": "1",
+      "produto": "REFORMAS",
+      "tipoGrupo": "PARCELA INTEGRAL",
+      "valorCarta": 10000,
+      "valorParcela": 282.76,
+      "taxaAdm": 26.5,
+      "lanceMedio": 0,
+      "lanceEmbutidoPermite": 10,
+      "totalParticipantes": 200,
+      "diaAssembleia": " 14",
+      "prazo": 48,
+      "nomeAdministradora": "RODOBENS"
+    }
+  ]
+}
