@@ -13,26 +13,58 @@ function N(v) {
     .trim()
     .toUpperCase();
 }
-function slugKey(v){
+function toTitle(s) {
+  return String(s || '')
+    .toLowerCase()
+    .replace(/(^|[\s_-])([a-zà-ú])/g, (_, p, c) => p + c.toUpperCase());
+}
+function slugKey(v) {
   const t = N(v);
-  const k = t.replace(/[^A-Z0-9]+/g,'_').replace(/^_|_$/g,'');
+  const k = t.replace(/[^A-Z0-9]+/g, '_').replace(/^_|_$/g, '');
   return k || 'OUTROS_BENS';
 }
 
-/* ------------ Merge de datasets ------------ */
+/* ------------ Merge + sanitização dos datasets ------------ */
 function mergeDatasets(list) {
   const admMap = new Map(); // id -> {id,nome}
   const grupos = [];
+
   for (const d of list || []) {
     const adms = Array.isArray(d?.administradoras) ? d.administradoras : [];
-    const gs   = Array.isArray(d?.grupos) ? d.grupos : [];
-    adms.forEach(a => { if (a?.id && !admMap.has(a.id)) admMap.set(a.id, a); });
-    gs.forEach(g => grupos.push(g));
+    const gs = Array.isArray(d?.grupos) ? d.grupos : [];
+
+    adms.forEach(a => {
+      const id = String(a?.id || '').trim();
+      const nome = String(a?.nome || '').trim();
+      if (id && !admMap.has(id)) admMap.set(id, { id, nome });
+    });
+
+    gs.forEach(g => {
+      const id = String(g?.id || '').trim();
+      const administradoraId = String(g?.administradoraId || '').trim();
+      const produto = String(g?.produto || '').trim();
+      const tipoGrupo = String(g?.tipoGrupo || '').trim();
+      if (!id || !administradoraId || !produto) return; // ignora inválidos
+
+      grupos.push({
+        ...g,
+        id,
+        administradoraId,
+        produto,
+        tipoGrupo,
+        valorCarta: Number(g?.valorCarta ?? 0),
+        valorParcela: Number(g?.valorParcela ?? 0),
+        taxaAdm: Number(g?.taxaAdm ?? 0),
+        lanceMedio: Number(g?.lanceMedio ?? 0),
+        prazo: Number(g?.prazo ?? 0),
+      });
+    });
   }
+
   return { administradoras: Array.from(admMap.values()), grupos };
 }
 
-/* ------------ Admin key por NOME ------------ */
+/* ------------ Admin key por NOME (estável) ------------ */
 function adminKeyFromGroup(g, administradorasMap) {
   const id = String(g?.administradoraId ?? '');
   const byId = administradorasMap.get(id)?.nome;
@@ -43,88 +75,77 @@ function adminKeyFromGroup(g, administradorasMap) {
 export default function Home() {
   const [data, setData] = useState({ administradoras: [], grupos: [] });
   const [filters, setFilters] = useState({});
-  const [compare, setCompare] = useState([]);
+  const [selectedIds, setSelectedIds] = useState([]);
 
-  // carrega mapa opcional de produtos
-  const [prodMap, setProdMap] = useState({ map:{}, labels:{} });
+  // Mapa opcional de produtos (/_product-map.json)
+  const [prodMap, setProdMap] = useState({ map: {}, labels: {} });
   useEffect(() => {
     (async () => {
       try {
-        const j = await fetch('/data/_product-map.json', { cache:'no-store' }).then(r => r.ok ? r.json() : {map:{},labels:{}});
+        const res = await fetch('/data/_product-map.json', { cache: 'no-store' });
+        if (!res.ok) {
+          setProdMap({ map: {}, labels: {} });
+          return;
+        }
+        const j = await res.json();
         const map = {};
-        Object.entries(j.map || {}).forEach(([raw, key]) => { map[N(raw)] = String(key); });
+        Object.entries(j.map || {}).forEach(([raw, key]) => {
+          map[N(raw)] = String(key);
+        });
         setProdMap({ map, labels: j.labels || {} });
-      } catch { setProdMap({ map:{}, labels:{} }); }
+      } catch {
+        setProdMap({ map: {}, labels: {} });
+      }
     })();
   }, []);
 
   const administradorasMap = useMemo(() => {
     const m = new Map();
-    (data?.administradoras || []).forEach(a => { if (a?.id) m.set(String(a.id), a); });
+    (data?.administradoras || []).forEach(a => {
+      if (a?.id) m.set(String(a.id), a);
+    });
     return m;
   }, [data]);
 
+  // Carrega manifest + datasets com tolerância a falhas
   useEffect(() => {
-      async function () {
-  try {
-    const man = await fetch('/data/_manifest.json', { cache: 'no-store' }).then(r => r.json());
-    const files = Array.isArray(man?.datasets) ? man.datasets : [];
+    async function loadAll() {
+      try {
+        const man = await fetch('/data/_manifest.json', { cache: 'no-store' }).then(r => r.json());
+        const files = Array.isArray(man?.datasets) ? man.datasets : [];
 
-    const results = await Promise.allSettled(
-      files.map(f =>
-        fetch(`/data/${f}`, { cache: 'no-store' })
-          .then(r => {
-            if (!r.ok) throw new Error(`Falha ao baixar ${f}: ${r.status}`);
-            return r.json();
-          })
-          .then(j => ({ file: f, data: j }))
-      )
-    );
+        const results = await Promise.allSettled(
+          files.map(f =>
+            fetch(`/data/${f}`, { cache: 'no-store' })
+              .then(r => {
+                if (!r.ok) throw new Error(`Falha ao baixar ${f}: ${r.status}`);
+                return r.json();
+              })
+              .then(j => ({ file: f, data: j }))
+          )
+        );
 
-    const ok = results
-      .filter(r => r.status === 'fulfilled')
-      .map(r => r.value.data);
+        const ok = results
+          .filter(r => r.status === 'fulfilled')
+          .map(r => r.value.data);
 
-    // Log gentil de problemas, mas sem quebrar a UI
-    results
-      .filter(r => r.status === 'rejected')
-      .forEach(r => console.warn('[Dataset ignorado]', r.reason));
+        results
+          .filter(r => r.status === 'rejected')
+          .forEach(r => console.warn('[Dataset ignorado]', r.reason));
 
-    setData(mergeDatasets(ok));
-  } catch (e) {
-    console.error('Erro ao carregar datasets:', e);
-    setData({ administradoras: [], grupos: [] });
-  }
-  async function loadAll() {
-  try {
-    const man = await fetch('/data/_manifest.json', { cache: 'no-store' }).then(r => r.json());
-    const files = Array.isArray(man?.datasets) ? man.datasets : [];
+        setData(mergeDatasets(ok));
+      } catch (e) {
+        console.error('Erro ao carregar datasets:', e);
+        setData({ administradoras: [], grupos: [] });
+      }
+    }
+    loadAll();
 
-    const results = await Promise.allSettled(
-      files.map(f =>
-        fetch(`/data/${f}`, { cache: 'no-store' })
-          .then(r => {
-            if (!r.ok) throw new Error(`Falha ao baixar ${f}: ${r.status}`);
-            return r.json();
-          })
-          .then(j => ({ file: f, data: j }))
-      )
-    );
-
-    const ok = results
-      .filter(r => r.status === 'fulfilled')
-      .map(r => r.value.data);
-
-    // Log gentil de problemas, mas sem quebrar a UI
-    results
-      .filter(r => r.status === 'rejected')
-      .forEach(r => console.warn('[Dataset ignorado]', r.reason));
-
-    setData(mergeDatasets(ok));
-  } catch (e) {
-    console.error('Erro ao carregar datasets:', e);
-    setData({ administradoras: [], grupos: [] });
-  }
+    // tentar recuperar seleção do localStorage
+    try {
+      const raw = localStorage.getItem('compareSelection');
+      if (raw) setSelectedIds(JSON.parse(raw));
+    } catch {}
   }, []);
 
   // canoniza produto dinamicamente com fallback
@@ -151,37 +172,7 @@ export default function Home() {
 
       return okMin && okMax && okAdm && okProd && okTipo && okLance && okPrazo;
     });
-  }, [data, filters, administradorasMap, prodMap]);
+  }, [filters, data, administradorasMap, prodMap]);
 
-  function onCompareToggle(group, checked) {
-    setCompare(prev => {
-      const set = new Set(prev.map(x => x.id));
-      if (checked) {
-        if (!set.has(group.id)) return [...prev, group];
-        return prev;
-      }
-      return prev.filter(x => x.id !== group.id);
-    });
-    try {
-      const ids = (checked ? [...compare, group] : compare.filter(x => x.id !== group.id)).map(x => x.id);
-      localStorage.setItem('compareSelection', JSON.stringify(ids));
-    } catch {}
-  }
-
-  return (
-    <main className="container py-6 space-y-6">
-      <header>
-        <h1 className="text-2xl font-semibold text-brand-800">Simulador de Consórcio</h1>
-        <p className="text-sm text-gray-600">Filtros dinâmicos, visual moderno e contratação direta.</p>
-      </header>
-
-      <Filters data={data} onFilterChange={setFilters} />
-
-      <div className="grid gap-6 [grid-template-columns:repeat(auto-fit,minmax(404px,1fr))]">
-        {filtered.map(g => (
-          <GroupCard key={g.id} group={g} onCompareToggle={onCompareToggle} />
-        ))}
-      </div>
-    </main>
-  );
-}
+  const selected = useMemo(() => {
+    const set = new Set(
