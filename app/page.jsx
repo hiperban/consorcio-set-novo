@@ -5,7 +5,7 @@ import { useEffect, useMemo, useState } from 'react';
 import Filters from '@/components/Filters';
 import GroupCard from '@/components/GroupCard';
 
-/* Helpers */
+/* Helpers para campos canônicos e números */
 function N(v){
   return String(v ?? '')
     .normalize('NFD')
@@ -37,51 +37,40 @@ function intLoose(v){
   return m ? parseInt(m[0],10) : NaN;
 }
 
-/* Carrega e junta datasets */
+/* Carrega todos os datasets listados no manifesto */
 async function loadAllDatasets() {
-  // Tenta baixar o manifesto
-  let man;
-  try {
-    const r = await fetch('/data/_manifest.json', { cache:'no-store' });
-    if (!r.ok) {
-      console.error('[data] 404/_manifest.json não encontrado', r.status, r.statusText);
-      return { administradoras: [], grupos: [] };
-    }
-    man = await r.json();
-  } catch (e) {
-    console.error('[data] erro lendo _manifest.json', e);
-    return { administradoras: [], grupos: [] };
-  }
-
+  const rMan = await fetch('/data/_manifest.json', { cache:'no-store' });
+  if (!rMan.ok) return { administradoras: [], grupos: [] };
+  const man = await rMan.json();
   const files = Array.isArray(man?.datasets) ? man.datasets : [];
+
   const grupos = [];
   const admMap = new Map(); // id -> {id,nome}
 
-  // Busca cada dataset, mas se algum 404, loga e continua
   for (const fRaw of files) {
-    const f = String(fRaw || '').trim().replace(/^\/+/, '');
+    const f = String(fRaw || '').trim();
     if (!f) continue;
-    const url = `/data/${encodeURIComponent(f)}`;
-    try {
-      const r = await fetch(url, { cache:'no-store' });
-      if (!r.ok) {
-        console.warn('[data] 404 ao carregar dataset:', url, r.status, r.statusText);
-        continue;
-      }
-      const d = await r.json();
-      (d?.administradoras || []).forEach(a => { if (a?.id && !admMap.has(String(a.id))) admMap.set(String(a.id), a); });
-      (d?.grupos || []).forEach(g => grupos.push(g));
-    } catch (e) {
-      console.warn('[data] erro ao ler dataset:', url, e);
-    }
+    const r = await fetch(`/data/${encodeURIComponent(f)}`, { cache:'no-store' });
+    if (!r.ok) continue;
+    const d = await r.json();
+    (d?.administradoras || []).forEach(a => {
+      if (a?.id && !admMap.has(String(a.id))) admMap.set(String(a.id), a);
+    });
+    (d?.grupos || []).forEach(g => grupos.push(g));
   }
-
-  console.debug('[data] carregado:', { datasets: files.length, administradoras: admMap.size, grupos: grupos.length });
   return { administradoras: Array.from(admMap.values()), grupos };
+}
+
+/* Resolve o nome da administradora de cada grupo */
+function adminNameForGroup(g, admById) {
+  const byId = g?.administradoraId ? admById.get(String(g.administradoraId))?.nome : '';
+  return byId || g?.nomeAdministradora || '';
 }
 
 export default function Home() {
   const [raw, setRaw] = useState({ administradoras: [], grupos: [] });
+
+  // Filtros (sempre usando CHAVES)
   const [flt, setFlt] = useState({
     minCarta: undefined,
     maxCarta: undefined,
@@ -99,34 +88,34 @@ export default function Home() {
     })();
   }, []);
 
+  // Mapa de administradoras por ID
   const admById = useMemo(() => {
     const m = new Map();
     (raw.administradoras || []).forEach(a => { if (a?.id) m.set(String(a.id), a); });
     return m;
   }, [raw]);
 
-  // PREPROCESS: adiciona campos __*
+  // PREPROCESSA: adiciona campos canônicos __* para comparação rápida
   const data = useMemo(() => {
     const grupos = (raw.grupos || []).map(g => {
       const adminName = adminNameForGroup(g, admById);
       return {
         ...g,
-        __adminKey: N(adminName),
-        __productKey: slugKey(g?.produto),
-        __tipoKey: N(g?.tipoGrupo),
+        __adminName: adminName,
+        __adminKey: N(adminName),           // ex.: "ÂNCORA" -> "ANCORA"
+        __productKey: slugKey(g?.produto),  // ex.: "AUTOMOVEL" -> "AUTOMOVEL"
+        __tipoKey: N(g?.tipoGrupo),         // ex.: "PARCELA INTEGRAL" -> "PARCELA INTEGRAL"
         __valorCarta: numLoose(g?.valorCarta),
         __valorParcela: numLoose(g?.valorParcela),
         __lanceMedio: numLoose(g?.lanceMedio),
         __prazo: intLoose(g?.prazo),
-        __adminName: adminName,
       };
     });
     return { administradoras: raw.administradoras, grupos };
   }, [raw, admById]);
 
-  // Recebe filtros já como CHAVES
+  // Recebe filtros aplicados pelo componente de filtros
   function handleApplyFromUI(ui){
-    console.debug('[page] apply filters <-', ui);
     setFlt({
       minCarta: ui.minCarta ?? undefined,
       maxCarta: ui.maxCarta ?? undefined,
@@ -138,40 +127,33 @@ export default function Home() {
     });
   }
 
+  // FILTRAGEM AND ESTRITA (chave-com-chave; números com verificação)
   const filtered = useMemo(() => {
+    const arr = Array.isArray(data?.grupos) ? data.grupos : [];
     const { minCarta, maxCarta, adminKey, productKey, tipoKey, lanceMin, prazo } = flt;
-    const out = (data.grupos || []).filter(g => {
+
+    return arr.filter(g => {
       if (minCarta != null && Number.isFinite(minCarta) && !(g.__valorCarta >= Number(minCarta))) return false;
       if (maxCarta != null && Number.isFinite(maxCarta) && !(g.__valorCarta <= Number(maxCarta))) return false;
       if (adminKey   && g.__adminKey   !== adminKey)   return false;
       if (productKey && g.__productKey !== productKey) return false;
       if (tipoKey    && g.__tipoKey    !== tipoKey)    return false;
-      if (lanceMin != null && Number.isFinite(lanceMin) && !(g.__lanceMedio >= Number(lanceMin))) return false;
-      if (prazo    != null && Number.isFinite(prazo)    && !(g.__prazo === Number(prazo))) return false;
+      if (lanceMin   != null && Number.isFinite(lanceMin) && !(g.__lanceMedio >= Number(lanceMin))) return false;
+      if (prazo      != null && Number.isFinite(prazo)    && !(g.__prazo === Number(prazo))) return false;
       return true;
     });
-    console.debug('[page] filtered', {
-      total: data.grupos?.length || 0,
-      after: out.length,
-      keys: { adminKey, productKey, tipoKey, minCarta, maxCarta, lanceMin, prazo },
-      sample: out.slice(0,3).map(g=>({__adminKey:g.__adminKey,__productKey:g.__productKey,numero:g.numeroGrupo}))
-    });
-    return out;
   }, [data, flt]);
 
   return (
     <main className="container py-6 space-y-6">
       <header>
         <h1 className="text-2xl font-semibold text-brand-800">Simulador de Consórcio</h1>
-        <p className="text-xs text-gray-500">
-          <strong>Debug:</strong> adminKey=<code>{flt.adminKey||'-'}</code> · productKey=<code>{flt.productKey||'-'}</code> · tipoKey=<code>{flt.tipoKey||'-'}</code>
-        </p>
       </header>
 
       <Filters data={data} onApply={handleApplyFromUI} />
 
       <div className="grid gap-6 [grid-template-columns:repeat(auto-fit,minmax(360px,1fr))]">
-        {filtered.map((g, idx) => (
+        {(filtered || []).map((g, idx) => (
           <GroupCard
             key={g.id ?? `${g.__adminKey}-${g.__productKey}-${g.numeroGrupo ?? idx}`}
             group={{ ...g, nomeAdministradora: g.__adminName || g.nomeAdministradora }}
