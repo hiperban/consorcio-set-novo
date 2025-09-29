@@ -5,7 +5,7 @@ import { useEffect, useMemo, useState } from 'react';
 import Filters from '@/components/Filters';
 import GroupCard from '@/components/GroupCard';
 
-/* Normalizações e enums robustos */
+/* Helpers */
 function N(v){
   return String(v ?? '')
     .normalize('NFD')
@@ -32,10 +32,9 @@ function intLoose(v){
   return m ? parseInt(m[0],10) : NaN;
 }
 
-/* Map de produtos: sinônimos -> código + label amigável */
+/* Enums robustos para produto */
 function productToCodeAndLabel(raw){
   const t = N(raw);
-  // sinônimos comuns
   if (/(AUTO|CARRO|VEICUL)/.test(t)) return { code:'AUTOMOVEL', label:'Automóvel' };
   if (/(IMOVEL|IM\u00D3VEL|IMOVEIS)/.test(t)) return { code:'IMOVEL', label:'Imóvel' };
   if (/(MOTO|MOTOCICL)/.test(t)) return { code:'MOTO', label:'Moto' };
@@ -44,22 +43,18 @@ function productToCodeAndLabel(raw){
   if (/(PLACA|SOLAR)/.test(t)) return { code:'PLACA_SOLAR', label:'Placa Solar' };
   return { code:'OUTROS', label: raw ? raw : 'Outros Bens' };
 }
-
-/* Tipo do grupo: INTEGRAL/REDUZIDA */
 function tipoToCode(raw){
   const t = N(raw);
   if (t.includes('INTEGRAL')) return 'INTEGRAL';
   if (t.includes('REDUZIDA')) return 'REDUZIDA';
   return '';
 }
-
-/* Nome da administradora por ID quando disponível */
 function adminNameForGroup(g, admById) {
   const byId = g?.administradoraId ? admById.get(String(g.administradoraId))?.nome : '';
   return byId || g?.nomeAdministradora || '';
 }
 
-/* Loader simples e determinístico */
+/* Carrega todos os datasets listados no _manifest.json */
 async function loadAllDatasets() {
   const rMan = await fetch('/data/_manifest.json', { cache:'no-store' });
   if (!rMan.ok) return { administradoras: [], grupos: [] };
@@ -74,26 +69,39 @@ async function loadAllDatasets() {
     const r = await fetch(`/data/${encodeURIComponent(f)}`, { cache:'no-store' });
     if (!r.ok) continue;
     const d = await r.json();
-    (d?.administradoras || []).forEach(a => { if (a?.id && !admMap.has(String(a.id))) admMap.set(String(a.id), a); });
+    (d?.administradoras || []).forEach(a => { if (a?.id) admMap.set(String(a.id), a); });
     (d?.grupos || []).forEach(g => grupos.push(g));
   }
   return { administradoras: Array.from(admMap.values()), grupos };
 }
 
+/* Função única que decide se o grupo passa no filtro */
+function matches(g, flt) {
+  // Admin
+  if (flt.adminKey) {
+    if (flt.adminKey.startsWith('id:')) {
+      const id = flt.adminKey.slice(3);
+      if (g.__adminId !== id) return false;
+    } else {
+      if (g.__adminKey !== flt.adminKey) return false;
+    }
+  }
+  // Produto e Tipo
+  if (flt.productCode && g.__productCode !== flt.productCode) return false;
+  if (flt.tipoCode && g.__tipoCode !== flt.tipoCode) return false;
+
+  // Numéricos
+  if (Number.isFinite(flt.minCarta) && !(g.__valorCarta >= flt.minCarta)) return false;
+  if (Number.isFinite(flt.maxCarta) && !(g.__valorCarta <= flt.maxCarta)) return false;
+  if (Number.isFinite(flt.lanceMin) && !(g.__lanceMedio >= flt.lanceMin)) return false;
+  if (Number.isFinite(flt.prazo)    && !(g.__prazo === flt.prazo))       return false;
+
+  return true;
+}
+
 export default function Home() {
   const [raw, setRaw] = useState({ administradoras: [], grupos: [] });
-
-  // Resultado materializado (view) e filtros atuais
-  const [view, setView] = useState([]); // ← cards mostrados
-  const [flt, setFlt] = useState({
-    minCarta: undefined,
-    maxCarta: undefined,
-    adminKey: '',
-    productCode: '',
-    tipoCode: '',
-    lanceMin: undefined,
-    prazo: undefined,
-  });
+  const [flt, setFlt] = useState({}); // estado do filtro atual
 
   // carrega datasets
   useEffect(() => {
@@ -114,18 +122,18 @@ export default function Home() {
     return m;
   }, [raw]);
 
-  // PREPROCESSA uma vez: gera campos canônicos e mantém array base
+  // prepara base com campos canônicos
   const base = useMemo(() => {
-    const grupos = (raw.grupos || []).map(g => {
+    return (raw.grupos || []).map(g => {
       const adminName = adminNameForGroup(g, admById);
       const { code:productCode, label:productLabel } = productToCodeAndLabel(g?.produto);
       return {
         ...g,
         __adminId: g?.administradoraId ? String(g.administradoraId) : '',
         __adminName: adminName,
-        __adminKey: N(adminName),          // p/ filtro por nome
-        __productCode: productCode,        // enum robusto
-        __productLabel: productLabel,      // label amigável
+        __adminKey: N(adminName),
+        __productCode: productCode,
+        __productLabel: productLabel,
         __tipoCode: tipoToCode(g?.tipoGrupo),
         __valorCarta: numLoose(g?.valorCarta),
         __valorParcela: numLoose(g?.valorParcela),
@@ -133,60 +141,32 @@ export default function Home() {
         __prazo: intLoose(g?.prazo),
       };
     });
-    return grupos;
   }, [raw, admById]);
 
-  // assim que base muda, mostra tudo
-  useEffect(() => { setView(base); }, [base]);
-
-  // Aplica filtros de forma determinística e salva em view (sem useMemo)
-  function applyFilters(ui){
-    const next = {
-      minCarta: ui.minCarta ?? undefined,
-      maxCarta: ui.maxCarta ?? undefined,
-      adminKey: ui.adminKey || '',
-      productCode: ui.productCode || '',
-      tipoCode: ui.tipoCode || '',
-      lanceMin: ui.lanceMin ?? undefined,
-      prazo: ui.prazo ?? undefined,
+  // aplica filtro SEMPRE que flt ou base mudarem
+  const visible = useMemo(() => {
+    const safe = {
+      minCarta: Number.isFinite(flt.minCarta) ? flt.minCarta : undefined,
+      maxCarta: Number.isFinite(flt.maxCarta) ? flt.maxCarta : undefined,
+      adminKey: flt.adminKey || '',
+      productCode: flt.productCode || '',
+      tipoCode: flt.tipoCode || '',
+      lanceMin: Number.isFinite(flt.lanceMin) ? flt.lanceMin : undefined,
+      prazo: Number.isFinite(flt.prazo) ? flt.prazo : undefined,
     };
-    setFlt(next);
-
-    const out = base.filter(g => {
-      // Admin: aceita "id:3" OU chave por nome
-      if (next.adminKey) {
-        if (next.adminKey.startsWith('id:')) {
-          const id = next.adminKey.slice(3);
-          if (g.__adminId !== id) return false;
-        } else {
-          if (g.__adminKey !== next.adminKey) return false;
-        }
-      }
-      if (next.productCode && g.__productCode !== next.productCode) return false;
-      if (next.tipoCode && g.__tipoCode !== next.tipoCode) return false;
-
-      if (next.minCarta != null && Number.isFinite(next.minCarta) && !(g.__valorCarta >= Number(next.minCarta))) return false;
-      if (next.maxCarta != null && Number.isFinite(next.maxCarta) && !(g.__valorCarta <= Number(next.maxCarta))) return false;
-      if (next.lanceMin != null && Number.isFinite(next.lanceMin) && !(g.__lanceMedio >= Number(next.lanceMin))) return false;
-      if (next.prazo != null && Number.isFinite(next.prazo) && !(g.__prazo === Number(next.prazo))) return false;
-
-      return true;
-    });
-
-    setView(out);
-  }
+    return base.filter(g => matches(g, safe));
+  }, [base, flt]);
 
   return (
     <main className="container py-6 space-y-6">
       <header>
         <h1 className="text-2xl font-semibold text-brand-800">Simulador de Consórcio</h1>
-    </header>
+      </header>
 
-      {/* Filtros: quando clicar em aplicar, materializa em view */}
-      <Filters data={{ grupos: base }} onApply={applyFilters} />
+      <Filters data={{ grupos: base }} onApply={setFlt} />
 
       <div className="grid gap-6 [grid-template-columns:repeat(auto-fit,minmax(360px,1fr))]">
-        {(Array.isArray(view) ? view : []).map((g, idx) => (
+        {visible.map((g, idx) => (
           <GroupCard
             key={g.id ?? `${g.__adminKey}-${g.__productCode}-${g.numeroGrupo ?? idx}`}
             group={{ ...g, nomeAdministradora: g.__adminName || g.nomeAdministradora, produto: g.__productLabel }}
