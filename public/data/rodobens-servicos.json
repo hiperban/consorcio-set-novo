@@ -1,0 +1,58 @@
+{
+  "administradoras": [
+    {
+      "id": "1",
+      "nome": "RODOBENS"
+    }
+  ],
+  "grupos": [
+    {
+      "id": "G-090111-1759176377453",
+      "numeroGrupo": "090111",
+      "administradoraId": "1",
+      "produto": "SERVIÇOS",
+      "tipoGrupo": "PARCELA INTEGRAL",
+      "valorCarta": 15000,
+      "valorParcela": 1514.56,
+      "taxaAdm": 19,
+      "lanceMedio": 30,
+      "lanceEmbutidoPermite": 10,
+      "totalParticipantes": 200,
+      "diaAssembleia": "14",
+      "prazo": 12,
+      "nomeAdministradora": "RODOBENS"
+    },
+    {
+      "id": "G-090111-1759176390920",
+      "numeroGrupo": "090111",
+      "administradoraId": "1",
+      "produto": "SERVIÇOS",
+      "tipoGrupo": "PARCELA INTEGRAL",
+      "valorCarta": 14000,
+      "valorParcela": 1413.65,
+      "taxaAdm": 19,
+      "lanceMedio": 30,
+      "lanceEmbutidoPermite": 10,
+      "totalParticipantes": 200,
+      "diaAssembleia": "14",
+      "prazo": 12,
+      "nomeAdministradora": "RODOBENS"
+    },
+    {
+      "id": "G-090111-1759176407947",
+      "numeroGrupo": "090111",
+      "administradoraId": "1",
+      "produto": "SERVIÇOS",
+      "tipoGrupo": "PARCELA INTEGRAL",
+      "valorCarta": 16000,
+      "valorParcela": 1615.53,
+      "taxaAdm": 19,
+      "lanceMedio": 30,
+      "lanceEmbutidoPermite": 10,
+      "totalParticipantes": 200,
+      "diaAssembleia": "14",
+      "prazo": 12,
+      "nomeAdministradora": "RODOBENS"
+    }
+  ]
+}
