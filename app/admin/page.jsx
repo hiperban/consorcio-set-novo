@@ -66,19 +66,36 @@ export default function AdminPage() {
 
   // ---------- CARREGA DADOS ----------
   useEffect(() => {
-    async function loadAll() {
-      try {
-        const man = await fetch('/data/_manifest.json', { cache: 'no-store' }).then(r => r.json());
-        const files = Array.isArray(man?.datasets) ? man.datasets : [];
-        const datasets = await Promise.all(
-          files.map(f => fetch(`/data/${f}`, { cache: 'no-store' }).then(r => r.json()))
-        );
-        setData(mergeDatasets(datasets));
-      } catch {
-        setData({ administradoras: [], grupos: [] });
-      }
-    }
-    loadAll();
+   async function loadAll() {
+  try {
+    const man = await fetch('/data/_manifest.json', { cache: 'no-store' }).then(r => r.json());
+    const files = Array.isArray(man?.datasets) ? man.datasets : [];
+
+    const results = await Promise.allSettled(
+      files.map(f =>
+        fetch(`/data/${f}`, { cache: 'no-store' })
+          .then(r => {
+            if (!r.ok) throw new Error(`Falha ao baixar ${f}: ${r.status}`);
+            return r.json();
+          })
+          .then(j => ({ file: f, data: j }))
+      )
+    );
+
+    const ok = results
+      .filter(r => r.status === 'fulfilled')
+      .map(r => r.value.data);
+
+    // Log gentil de problemas, mas sem quebrar a UI
+    results
+      .filter(r => r.status === 'rejected')
+      .forEach(r => console.warn('[Dataset ignorado]', r.reason));
+
+    setData(mergeDatasets(ok));
+  } catch (e) {
+    console.error('Erro ao carregar datasets:', e);
+    setData({ administradoras: [], grupos: [] });
+  }
   }, []);
 
   // ---------- UI ----------
