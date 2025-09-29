@@ -15,169 +15,167 @@ function toTitle(s){
     .replace(/(^|[\s_-])([a-zà-ú])/g, (_,p,c)=> p + c.toUpperCase());
 }
 function slugKey(v){
-  // transforma qualquer texto em CHAVE_ESTAVEL
   const t = N(v);
   const k = t.replace(/[^A-Z0-9]+/g,'_').replace(/^_|_$/g,'');
   return k || 'OUTROS_BENS';
 }
 
-/* ------------ Máscara BRL ------------ */
-function maskBRL(input) {
-  const digits = String(input || '').replace(/\D/g, '');
-  if (!digits) return '';
-  const cents = parseInt(digits, 10);
-  return (cents / 100).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
-}
-function parseBRLToNumber(masked) {
-  const digits = String(masked || '').replace(/\D/g, '');
-  if (!digits) return undefined;
-  return parseInt(digits, 10) / 100;
-}
+export default function Filters({ data, onFilterChange }) {
+  const [minCarta, setMinCarta]       = useState('');
+  const [maxCarta, setMaxCarta]       = useState('');
+  const [admKey, setAdmKey]           = useState('');
+  const [produtoKey, setProdutoKey]   = useState('');
+  const [tipoGrupo, setTipoGrupo]     = useState('');
+  const [lanceMin, setLanceMin]       = useState('');
+  const [prazo, setPrazo]             = useState('');
 
-export default function Filters({ data, onFilterChange }){
-  // ------- carrega taxonomia opcional de produtos -------
-  const [prodMap, setProdMap] = useState({ map:{}, labels:{} });
-  useEffect(() => {
-    (async () => {
-      try {
-        const j = await fetch('/data/_product-map.json', { cache:'no-store' }).then(r => r.ok ? r.json() : {map:{},labels:{}});
-        // normaliza chaves do mapa
-        const map = {};
-        Object.entries(j.map || {}).forEach(([raw, key]) => { map[N(raw)] = String(key); });
-        setProdMap({ map, labels: j.labels || {} });
-      } catch { setProdMap({ map:{}, labels:{} }); }
-    })();
-  }, []);
-
-  // Inputs mascarados
-  const [minCartaMasked, setMinCartaMasked] = useState('');
-  const [maxCartaMasked, setMaxCartaMasked] = useState('');
-
-  // Filtros
-  const [admKey, setAdmKey] = useState('');    // administradora por NOME canônico
-  const [lanceMin, setLanceMin] = useState('');
-  const [produtoKey, setProdutoKey] = useState(''); // CHAVE canônica dinâmica
-  const [tipoGrupo, setTipoGrupo] = useState('');
-  const [prazo, setPrazo] = useState('');
-
-  // --------- Funções de canonização de produto ----------
-  const productKey = (label) => {
-    const norm = N(label);
-    const mapped = prodMap.map[norm];    // se tiver sinônimo no json, usa
-    return mapped || slugKey(norm);      // senão vira uma chave automática
-  };
-  const productLabelForKey = (key, exampleLabel) => {
-    return prodMap.labels?.[key] || toTitle((exampleLabel || key).replace(/_/g,' '));
-  };
-
-  /* Opções de Administradora por NOME (canônico) */
-  const administradoras = useMemo(() => {
-    const map = new Map();
-    (data?.administradoras || []).forEach(a => {
-      const label = a?.nome ?? '';
-      const key = N(label);
-      if (key && !map.has(key)) map.set(key, label);
-    });
-    (data?.grupos || []).forEach(g => {
-      const label = g?.nomeAdministradora ?? '';
-      const key = N(label);
-      if (key && !map.has(key)) map.set(key, label);
-    });
-    return Array.from(map.entries())
-      .map(([key, label]) => ({ key, label }))
-      .sort((x,y)=> String(x.label).localeCompare(String(y.label), 'pt-BR'));
+  // Deriva administradoras do próprio dataset
+  const admOptions = useMemo(() => {
+    const arr = Array.isArray(data?.administradoras) ? data.administradoras : [];
+    return arr
+      .map(a => ({ key: N(a?.nome), label: String(a?.nome || '').trim() }))
+      .filter(a => a.key && a.label)
+      .reduce((acc, a) => {
+        if (!acc.some(x => x.key === a.key)) acc.push(a);
+        return acc;
+      }, [])
+      .sort((a, b) => a.label.localeCompare(b.label, 'pt-BR'));
   }, [data]);
 
-  /* Opções de Produto (100% dinâmicas) */
-  const produtos = useMemo(() => {
-    const m = new Map(); // key -> label bonito
-    (data?.grupos || []).forEach(g => {
-      const key = productKey(g?.produto);
-      if (!m.has(key)) m.set(key, productLabelForKey(key, g?.produto));
+  // Deriva produtos de TODOS os grupos (dinâmico)
+  const produtoOptions = useMemo(() => {
+    const gs = Array.isArray(data?.grupos) ? data.grupos : [];
+    const map = new Map(); // key -> label
+    for (const g of gs) {
+      const raw = String(g?.produto || '').trim();
+      if (!raw) continue;
+      const key = slugKey(N(raw));
+      if (!map.has(key)) map.set(key, toTitle(raw));
+    }
+    return Array.from(map.entries()).map(([key, label]) => ({ key, label }))
+      .sort((a, b) => a.label.localeCompare(b.label, 'pt-BR'));
+  }, [data]);
+
+  // Deriva tipos de grupo (dinâmico)
+  const tipoOptions = useMemo(() => {
+    const gs = Array.isArray(data?.grupos) ? data.grupos : [];
+    const set = new Set();
+    for (const g of gs) {
+      const t = N(g?.tipoGrupo || '');
+      if (t) set.add(t);
+    }
+    const arr = Array.from(set.values()).map(k => ({ key: k, label: k }));
+    // Se quiser impor ordem conhecida:
+    const order = ['PARCELA REDUZIDA', 'PARCELA INTEGRAL'];
+    arr.sort((a,b) => {
+      const ia = order.indexOf(a.key);
+      const ib = order.indexOf(b.key);
+      if (ia >= 0 && ib >= 0) return ia - ib;
+      if (ia >= 0) return -1;
+      if (ib >= 0) return 1;
+      return a.label.localeCompare(b.label, 'pt-BR');
     });
-    return Array.from(m.entries())
-      .map(([value, label]) => ({ value, label }))
-      .sort((a,b)=> a.label.localeCompare(b.label, 'pt-BR'));
-  }, [data, prodMap]);
+    return arr;
+  }, [data]);
 
-  // envia filtros para a página
-  useEffect(()=>{
-    const min   = parseBRLToNumber(minCartaMasked);
-    const max   = parseBRLToNumber(maxCartaMasked);
-    const lance = lanceMin === '' ? undefined : parseFloat(lanceMin);
-    const prazoNum = prazo === '' ? undefined : parseInt(prazo, 10);
-
-    onFilterChange({
-      minCarta: Number.isNaN(min) ? undefined : min,
-      maxCarta: Number.isNaN(max) ? undefined : max,
-      admKey: admKey || '',
-      produtoKey: produtoKey || '',
-      tipoGrupo: N(tipoGrupo || ''),
-      lanceMin: Number.isNaN(lance) ? undefined : lance,
-      prazo: Number.isNaN(prazoNum) ? undefined : prazoNum
+  // Dispara mudança agregada para o pai
+  useEffect(() => {
+    onFilterChange?.({
+      minCarta: minCarta ? Number(minCarta) : null,
+      maxCarta: maxCarta ? Number(maxCarta) : null,
+      admKey: admKey || null,
+      produtoKey: produtoKey || null,
+      tipoGrupo: tipoGrupo || null,
+      lanceMin: lanceMin ? Number(lanceMin) : null,
+      prazo: prazo ? Number(prazo) : null,
     });
-  }, [minCartaMasked, maxCartaMasked, admKey, lanceMin, produtoKey, tipoGrupo, prazo, onFilterChange]);
-
-  const onAdmChange = (value) => { setAdmKey(value); setProdutoKey(''); setTipoGrupo(''); };
+  }, [minCarta, maxCarta, admKey, produtoKey, tipoGrupo, lanceMin, prazo, onFilterChange]);
 
   return (
-    <div className="card grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3">
-      <div>
-        <label className="block text-xs text-gray-600 mb-1">Valor Carta Mín (R$)</label>
-        <input
-          type="text" inputMode="numeric" placeholder="R$ 0,00"
-          value={minCartaMasked} onChange={(e)=> setMinCartaMasked(maskBRL(e.target.value))}
-          className="w-full border rounded-2xl px-3 py-2"
-        />
-      </div>
-      <div>
-        <label className="block text-xs text-gray-600 mb-1">Valor Carta Máx (R$)</label>
-        <input
-          type="text" inputMode="numeric" placeholder="R$ 0,00"
-          value={maxCartaMasked} onChange={(e)=> setMaxCartaMasked(maskBRL(e.target.value))}
-          className="w-full border rounded-2xl px-3 py-2"
-        />
-      </div>
-
+    <div className="grid gap-3 md:grid-cols-3 lg:grid-cols-6">
       <div>
         <label className="block text-xs text-gray-600 mb-1">Administradora</label>
-        <select value={admKey} onChange={e=>onAdmChange(e.target.value)} className="w-full border rounded-2xl px-3 py-2">
+        <select
+          value={admKey}
+          onChange={e => setAdmKey(e.target.value)}
+          className="w-full border rounded-2xl px-3 py-2 bg-white"
+        >
           <option value="">Todas</option>
-          {administradoras.map(opt => (<option key={opt.key} value={opt.key}>{opt.label}</option>))}
+          {admOptions.map(a => (
+            <option key={a.key} value={a.key}>{a.label}</option>
+          ))}
         </select>
       </div>
 
       <div>
-        <label className="block text-xs text-gray-600 mb-1">% Lance Mínimo</label>
-        <input
-          value={lanceMin} onChange={e=>setLanceMin(e.target.value)}
-          inputMode="numeric" placeholder="ex.: 20"
-          className="w-full border rounded-2xl px-3 py-2"
-        />
-      </div>
-
-      <div>
         <label className="block text-xs text-gray-600 mb-1">Produto</label>
-        <select value={produtoKey} onChange={e=>setProdutoKey(e.target.value)} className="w-full border rounded-2xl px-3 py-2">
+        <select
+          value={produtoKey}
+          onChange={e => setProdutoKey(e.target.value)}
+          className="w-full border rounded-2xl px-3 py-2 bg-white"
+        >
           <option value="">Todos</option>
-          {produtos.map(opt => (<option key={opt.value} value={opt.value}>{opt.label}</option>))}
+          {produtoOptions.map(p => (
+            <option key={p.key} value={p.key}>{p.label}</option>
+          ))}
         </select>
       </div>
 
       <div>
         <label className="block text-xs text-gray-600 mb-1">Tipo de Grupo</label>
-        <select value={tipoGrupo} onChange={e=>setTipoGrupo(e.target.value)} className="w-full border rounded-2xl px-3 py-2">
+        <select
+          value={tipoGrupo}
+          onChange={e => setTipoGrupo(e.target.value)}
+          className="w-full border rounded-2xl px-3 py-2 bg-white"
+        >
           <option value="">Todos</option>
-          <option value={N('PARCELA REDUZIDA')}>PARCELA REDUZIDA</option>
-          <option value={N('PARCELA INTEGRAL')}>PARCELA INTEGRAL</option>
+          {tipoOptions.map(t => (
+            <option key={t.key} value={t.key}>{t.label}</option>
+          ))}
         </select>
+      </div>
+
+      <div>
+        <label className="block text-xs text-gray-600 mb-1">Carta (mín.)</label>
+        <input
+          value={minCarta}
+          onChange={e => setMinCarta(e.target.value.replace(/\D/g, ''))}
+          inputMode="numeric"
+          className="w-full border rounded-2xl px-3 py-2"
+          placeholder="ex: 20000"
+        />
+      </div>
+
+      <div>
+        <label className="block text-xs text-gray-600 mb-1">Carta (máx.)</label>
+        <input
+          value={maxCarta}
+          onChange={e => setMaxCarta(e.target.value.replace(/\D/g, ''))}
+          inputMode="numeric"
+          className="w-full border rounded-2xl px-3 py-2"
+          placeholder="ex: 80000"
+        />
+      </div>
+
+      <div>
+        <label className="block text-xs text-gray-600 mb-1">Lance mínimo (%)</label>
+        <input
+          value={lanceMin}
+          onChange={e => setLanceMin(e.target.value.replace(/[^0-9.]/g, ''))}
+          inputMode="decimal"
+          className="w-full border rounded-2xl px-3 py-2"
+          placeholder="ex: 20"
+        />
       </div>
 
       <div>
         <label className="block text-xs text-gray-600 mb-1">Prazo (meses)</label>
         <input
-          value={prazo} onChange={e=>setPrazo(e.target.value)}
-          inputMode="numeric" className="w-full border rounded-2xl px-3 py-2"
+          value={prazo}
+          onChange={e => setPrazo(e.target.value.replace(/\D/g, ''))}
+          inputMode="numeric"
+          className="w-full border rounded-2xl px-3 py-2"
+          placeholder="ex: 84"
         />
       </div>
     </div>
