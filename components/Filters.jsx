@@ -1,7 +1,7 @@
 'use client';
 import { useMemo, useState } from 'react';
 
-/* Normaliza textos para CHAVES CANÔNICAS 1:1 */
+/* Normalização básica */
 function N(v){
   return String(v ?? '')
     .normalize('NFD')
@@ -10,71 +10,64 @@ function N(v){
     .trim()
     .toUpperCase();
 }
-function slugKey(v){
-  const t = N(v);
-  const k = t.replace(/[^A-Z0-9]+/g,'_').replace(/^_|_$/g,'');
-  return k || 'OUTROS_BENS';
-}
-function toTitle(s){
-  return String(s || '')
-    .toLowerCase()
-    .replace(/(^|[\s_-])([a-zà-ú])/g, (_,p,c)=> p + c.toUpperCase());
-}
 
 export default function Filters({ data, onApply }){
-  // Estados do formulário (sempre valores canônicos nas chaves)
   const [minCarta, setMinCarta] = useState('');
   const [maxCarta, setMaxCarta] = useState('');
-  const [adminKey, setAdminKey] = useState('');
-  const [productKey, setProductKey] = useState('');
-  const [tipoKey, setTipoKey] = useState('');
+  const [adminKey, setAdminKey] = useState('');   // guarda __adminKey (nome canonizado) OU "id:3"
+  const [productCode, setProductCode] = useState('');
+  const [tipoCode, setTipoCode] = useState('');
   const [lanceMin, setLanceMin] = useState('');
   const [prazo, setPrazo] = useState('');
 
-  // Administradoras vindas dos grupos (garante refletir o que existe de fato)
+  // Admins => duas chaves possíveis: por id (se houver) e por nome canônico
   const adminOptions = useMemo(() => {
-    const m = new Map(); // key -> label
+    const m = new Map();
     (data?.grupos || []).forEach(g => {
-      const key = g.__adminKey;
-      const label = g.__adminName || g.nomeAdministradora || key;
-      if (key && !m.has(key)) m.set(key, label);
+      if (g.__adminId) {
+        const key = `id:${g.__adminId}`;
+        if (!m.has(key)) m.set(key, g.__adminName || g.nomeAdministradora || key);
+      }
+      const keyName = g.__adminKey;
+      if (keyName && !m.has(keyName)) m.set(keyName, g.__adminName || g.nomeAdministradora || keyName);
     });
     return Array.from(m.entries())
       .map(([value,label]) => ({ value, label }))
       .sort((a,b)=> String(a.label).localeCompare(String(b.label),'pt-BR'));
   }, [data]);
 
-  // Produtos dependentes da administradora selecionada
+  // Produtos dependem da admin selecionada (funciona para id: e nome canônico)
   const productOptions = useMemo(() => {
-    const m = new Map(); // key -> label
+    const m = new Map();
     (data?.grupos || []).forEach(g => {
-      if (adminKey && g.__adminKey !== adminKey) return;
-      const key = g.__productKey;
-      const label = toTitle(String(g?.produto || key).replace(/_/g,' '));
-      if (key && !m.has(key)) m.set(key, label);
+      const matchAdmin =
+        !adminKey ||
+        (adminKey.startsWith('id:') ? `id:${g.__adminId}` === adminKey : g.__adminKey === adminKey);
+      if (!matchAdmin) return;
+      if (g.__productCode && !m.has(g.__productCode)) m.set(g.__productCode, g.__productLabel || g.__productCode);
     });
     return Array.from(m.entries())
       .map(([value,label]) => ({ value, label }))
       .sort((a,b)=> a.label.localeCompare(b.label,'pt-BR'));
   }, [data, adminKey]);
 
-  function aplicar(){
+  const aplicar = () => {
     onApply({
       minCarta: minCarta ? parseFloat(minCarta) : undefined,
       maxCarta: maxCarta ? parseFloat(maxCarta) : undefined,
-      adminKey: adminKey || '',
-      productKey: productKey || '',
-      tipoKey: tipoKey || '',
+      adminKey: adminKey || '',        // "id:3" ou "ANCORA"
+      productCode: productCode || '',  // enum robusto
+      tipoCode: tipoCode || '',        // INTEGRAL/REDUZIDA
       lanceMin: lanceMin ? parseFloat(lanceMin) : undefined,
       prazo: prazo ? parseInt(prazo,10) : undefined,
     });
-  }
-  function limpar(){
+  };
+  const limpar = () => {
     setMinCarta(''); setMaxCarta('');
-    setAdminKey(''); setProductKey('');
-    setTipoKey(''); setLanceMin(''); setPrazo('');
+    setAdminKey(''); setProductCode('');
+    setTipoCode(''); setLanceMin(''); setPrazo('');
     onApply({});
-  }
+  };
 
   return (
     <div className="card grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3">
@@ -91,7 +84,7 @@ export default function Filters({ data, onApply }){
         <label className="block text-xs text-gray-600 mb-1">Administradora</label>
         <select
           value={adminKey}
-          onChange={e=>{ setAdminKey(e.target.value); setProductKey(''); }}
+          onChange={e=>{ setAdminKey(e.target.value); setProductCode(''); }}
           className="w-full border rounded-2xl px-3 py-2"
         >
           <option value="">Todas</option>
@@ -102,8 +95,8 @@ export default function Filters({ data, onApply }){
       <div>
         <label className="block text-xs text-gray-600 mb-1">Produto</label>
         <select
-          value={productKey}
-          onChange={e=>setProductKey(e.target.value)}
+          value={productCode}
+          onChange={e=>setProductCode(e.target.value)}
           className="w-full border rounded-2xl px-3 py-2"
         >
           <option value="">Todos</option>
@@ -113,10 +106,10 @@ export default function Filters({ data, onApply }){
 
       <div>
         <label className="block text-xs text-gray-600 mb-1">Tipo de Grupo</label>
-        <select value={tipoKey} onChange={e=>setTipoKey(e.target.value)} className="w-full border rounded-2xl px-3 py-2">
+        <select value={tipoCode} onChange={e=>setTipoCode(e.target.value)} className="w-full border rounded-2xl px-3 py-2">
           <option value="">Todos</option>
-          <option value={N('PARCELA INTEGRAL')}>Parcela Integral</option>
-          <option value={N('PARCELA REDUZIDA')}>Parcela Reduzida</option>
+          <option value="INTEGRAL">Parcela Integral</option>
+          <option value="REDUZIDA">Parcela Reduzida</option>
         </select>
       </div>
 
