@@ -33,8 +33,8 @@ export default function AdminForm({ initialData }){
     produto:'AUTOMOVEL', tipoGrupo:'PARCELA INTEGRAL',
     valorCartaMasked:'',            // máscara BRL
     valorParcelaMasked:'',          // máscara BRL
-    taxaAdm:'', lanceMedio:'', lanceEmbutidoPermite:'',
-    totalParticipantes:'', diaAssembleia:'', prazo:''
+    prazo:'', taxaAdm:'', lanceMedio:'', lanceEmbutidoPermite:'',
+    totalParticipantes:'', diaAssembleia:''
   });
 
   /* ---------- Administradoras ---------- */
