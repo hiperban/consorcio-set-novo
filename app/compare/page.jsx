@@ -1,159 +1,102 @@
-"use client";
+'use client';
+export const dynamic = 'force-dynamic';
 
-import { useEffect, useMemo, useState } from "react";
-import Filters from "@/Filters";
-import GroupCard from "@/GroupCard";
-import CompareBar from "@/CompareBar";
+import { Suspense, useEffect, useMemo, useState } from 'react';
 
-/* ====== infra compartilhada ====== */
-const N = (v) =>
-  String(v ?? "")
-    .normalize("NFD")
-    .replace(/[\u0300-\u036f]/g, "")
-    .replace(/\s+/g, " ")
-    .trim()
-    .toUpperCase();
-const slug = (s) => N(s).replace(/[^A-Z0-9]+/g, "-");
-
-function productToCode(raw) {
-  const t = N(raw);
-  if (/IMOV/.test(t)) return { code: "IMOVEL", label: "Imóvel" };
-  if (/AUTO|CARRO|VEICUL/.test(t)) return { code: "AUTOMOVEL", label: "Automóvel" };
-  if (/MOTO/.test(t)) return { code: "MOTO", label: "Moto" };
-  if (/CAMINHAO/.test(t)) return { code: "CAMINHAO", label: "Caminhão" };
-  if (/PLACA|SOLAR/.test(t)) return { code: "PLACA_SOLAR", label: "Placa Solar" };
-  if (/SERVI[ÇC]O|SERVICO/.test(t)) return { code: "SERVICO", label: "Serviços" };
-  return { code: "OUTROS", label: raw || "Outros Bens" };
-}
-const tipoToCode = (raw) =>
-  N(raw).includes("REDUZ") ? "REDUZIDA" : N(raw).includes("INTEGRAL") ? "INTEGRAL" : "";
-
-async function loadAllDatasets() {
-  const man = await fetch("/_manifest.json").then((r) => r.json());
-  const files = Array.isArray(man?.datasets) ? man.datasets : [];
-  const results = await Promise.allSettled(
-    files.map((f) => fetch(`/${f}`).then((r) => r.json()))
-  );
-
-  const administradoras = [];
+/** Junta vários datasets do /public/data */
+function mergeDatasets(list) {
+  const admMap = new Map();
   const grupos = [];
-
-  for (const r of results) {
-    if (r.status !== "fulfilled") continue;
-    const j = r.value || {};
-    if (Array.isArray(j.administradoras)) administradoras.push(...j.administradoras);
-    if (Array.isArray(j.grupos)) grupos.push(...j.grupos);
+  for (const d of list) {
+    (d?.administradoras || []).forEach(a => { if (!admMap.has(a.id)) admMap.set(a.id, a); });
+    (d?.grupos || []).forEach(g => grupos.push(g));
   }
-
-  const admById = new Map();
-  for (const a of administradoras) {
-    const id = String(a.id ?? "").trim();
-    if (!id) continue;
-    admById.set(id, { ...a, __key: `id:${id}`, __slug: slug(a.nome || id) });
-  }
-
-  const normGrupos = grupos.map((g, i) => {
-    const id = String(g?.administradoraId ?? "").trim();
-    const adm = id ? admById.get(id) : null;
-    const prod = productToCode(g?.produto);
-    const tipo = tipoToCode(g?.tipoGrupo);
-
-    return {
-      ...g,
-      __adminId: id || "",
-      __adminName: adm?.nome || g?.nomeAdministradora || "",
-      __adminKey: adm?.__key || (g?.nomeAdministradora ? `nm:${slug(g.nomeAdministradora)}` : ""),
-      __productCode: prod.code,
-      __productLabel: prod.label,
-      __tipoCode: tipo,
-      __valorCarta: Number(g?.valorCarta ?? NaN),
-      __lanceMedio: Number(g?.lanceMedio ?? NaN),
-      __prazo: Number(g?.prazo ?? NaN),
-      __groupKey:
-        g?.id ||
-        `${adm?.__key ?? "adm"}|${prod.code}|${tipo}|${g?.numeroGrupo ?? i}|${g?.valorCarta ?? "x"}`,
-    };
-  });
-
-  return { administradoras, grupos: normGrupos };
+  return { administradoras: Array.from(admMap.values()), grupos };
 }
 
-function matches(g, flt) {
-  if (!g) return false;
-  if (flt.adminKey && g.__adminKey !== flt.adminKey) return false;
-  if (flt.productCode && g.__productCode !== flt.productCode) return false;
-  if (flt.tipoCode && g.__tipoCode !== flt.tipoCode) return false;
-  if (Number.isFinite(flt.minCarta) && !(g.__valorCarta >= flt.minCarta)) return false;
-  if (Number.isFinite(flt.maxCarta) && !(g.__valorCarta <= flt.maxCarta)) return false;
-  if (Number.isFinite(flt.lanceMin) && !(g.__lanceMedio >= flt.lanceMin)) return false;
-  if (Number.isFinite(flt.prazo) && !(g.__prazo === flt.prazo)) return false;
-  return true;
-}
-
-/* ---------- Página ---------- */
-export default function Page() {
-  const [data, setData] = useState(null);
-  const [error, setError] = useState("");
-  const [isLoading, setLoading] = useState(true);
-  const [filters, setFilters] = useState({});
-  const [selected, setSelected] = useState([]);
-
-  useEffect(() => {
-    let alive = true;
-    (async () => {
-      try {
-        const d = await loadAllDatasets();
-        if (!alive) return;
-        setData(d);
-      } catch (e) {
-        if (!alive) return;
-        setError("Falha ao carregar dados.");
-      } finally {
-        if (alive) setLoading(false);
-      }
-    })();
-    return () => {
-      alive = false;
-    };
-  }, []);
-
-  const grupos = useMemo(() => {
-    return (data?.grupos || []).filter((g) => matches(g, filters));
-  }, [data, filters]);
-
-  const toggle = (g, checked) => {
-    setSelected((prev) => {
-      const exists = prev.find((s) => s.__groupKey === g.__groupKey);
-      if (checked && !exists) return [...prev, g];
-      if (!checked && exists) return prev.filter((s) => s.__groupKey !== g.__groupKey);
-      return prev;
-    });
-  };
+function Table({ selected, all }) {
+  const rows = [
+    ['Grupo', g => g.numeroGrupo],
+    ['Administradora', g => g.nomeAdministradora],
+    ['Produto', g => g.produto],
+    ['Tipo de Grupo', g => g.tipoGrupo],
+    ['Valor Carta', g => (g.valorCarta ?? 0).toLocaleString('pt-BR', { style:'currency', currency:'BRL' })],
+    ['Parcela', g => (g.valorParcela ?? 0).toLocaleString('pt-BR', { style:'currency', currency:'BRL' })],
+    ['Taxa Adm', g => `${g.taxaAdm}%`],
+    ['% Lance Médio', g => `${g.lanceMedio}%`],
+    ['% Lance Embutido', g => `${g.lanceEmbutidoPermite}%`],
+    ['Participantes', g => g.totalParticipantes],
+    ['Prazo (meses)', g => g.prazo],
+    ['Assembleia (dia)', g => g.diaAssembleia],
+  ];
 
   return (
-    <main className="p-6 max-w-6xl mx-auto space-y-6">
-      <h1 className="text-2xl font-bold">Comparar Grupos</h1>
+    <div className="card overflow-auto">
+      <table className="min-w-full text-sm">
+        <thead>
+          <tr>
+            <th className="text-left p-3 w-48">Campo</th>
+            {selected.map(g => (
+              <th key={g.id} className="text-left p-3">{g.nomeAdministradora} #{g.numeroGrupo}</th>
+            ))}
+          </tr>
+        </thead>
+        <tbody>
+          {rows.map(([label,get])=>(
+            <tr key={label} className="border-t">
+              <td className="p-3 text-gray-600">{label}</td>
+              {selected.map(g=>(
+                <td key={g.id+label} className="p-3 font-medium">{get(g)}</td>
+              ))}
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  );
+}
 
-      <Filters data={data} onApply={setFilters} />
+export default function ComparePage() {
+  const [data, setData] = useState({ administradoras: [], grupos: [] });
+  const [selectedIds, setSelectedIds] = useState([]);
 
-      {isLoading && <p>Carregando…</p>}
-      {error && <p className="text-red-600">{error}</p>}
+  useEffect(() => {
+    async function loadAll() {
+      try {
+        const man = await fetch('/data/_manifest.json', { cache: 'no-store' }).then(r => r.json());
+        const files = Array.isArray(man.datasets) ? man.datasets : [];
+        const datasets = await Promise.all(
+          files.map(f => fetch(`/data/${f}`, { cache: 'no-store' }).then(r => r.json()))
+        );
+        setData(mergeDatasets(datasets));
+      } catch {
+        setData({ administradoras: [], grupos: [] });
+      }
+    }
+    loadAll();
 
-      <CompareBar selected={selected} />
+    // tentar recuperar seleção do localStorage
+    try {
+      const raw = localStorage.getItem('compareSelection');
+      if (raw) setSelectedIds(JSON.parse(raw));
+    } catch {}
+  }, []);
 
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-        {grupos.map((g) => (
-          <GroupCard
-            key={g.__groupKey}
-            group={{
-              ...g,
-              nomeAdministradora: g.__adminName || g.nomeAdministradora,
-              produto: g.__productLabel,
-            }}
-            onCompareToggle={toggle}
-          />
-        ))}
-      </div>
+  const selected = useMemo(() => {
+    const set = new Set(selectedIds);
+    return (data.grupos || []).filter(g => set.has(g.id)).slice(0, 4); // até 4 itens
+  }, [data, selectedIds]);
+
+  return (
+    <main className="container py-6 space-y-6">
+      <header>
+        <h1 className="text-2xl font-semibold text-brand-800">Comparar Grupos</h1>
+        <p className="text-sm text-gray-600">Tabela lado a lado com até 4 grupos.</p>
+      </header>
+
+      <Suspense>
+        <Table selected={selected} all={data.grupos||[]} />
+      </Suspense>
     </main>
   );
 }
