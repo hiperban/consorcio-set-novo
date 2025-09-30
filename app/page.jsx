@@ -2,6 +2,7 @@
 export const dynamic = 'force-dynamic';
 
 import { useEffect, useMemo, useState } from 'react';
+import Link from 'next/link';
 import Filters from '@/components/Filters';
 import GroupCard from '@/components/GroupCard';
 import {
@@ -10,7 +11,6 @@ import {
   canonAdmin,   adminLabel,
 } from '@/config/catalog';
 
-/* Helpers */
 function N(v) {
   return String(v ?? '')
     .normalize('NFD')
@@ -19,9 +19,8 @@ function N(v) {
     .toUpperCase();
 }
 
-/* Junta datasets com sanitização básica */
 function mergeDatasets(list) {
-  const admMap = new Map(); // id -> {id,nome}
+  const admMap = new Map();
   const grupos = [];
 
   for (const d of list || []) {
@@ -65,7 +64,6 @@ function adminNameFromGroup(g, administradorasMap){
   return byId || g?.nomeAdministradora || '';
 }
 
-/* Regra única de casamento de filtros (usada no useMemo e também no render) */
 function matchGroup(g, filters) {
   const { minCarta, maxCarta, admKey, produtoKey, tipoGrupo, lanceMin, prazo } = filters || {};
   const aKey = g.__aKey;
@@ -90,7 +88,6 @@ export default function Home() {
   const [filters, setFilters] = useState({});
   const [selectedIds, setSelectedIds] = useState([]);
 
-  // Carrega manifest + datasets (tolerante a falhas)
   useEffect(() => {
     async function loadAll() {
       try {
@@ -130,14 +127,12 @@ export default function Home() {
     loadAll();
   }, []);
 
-  // Mapa de administradoras por id (para descobrir o nome “oficial”)
   const administradorasMap = useMemo(() => {
     const m = new Map();
     (rawData?.administradoras || []).forEach(a => { if (a?.id) m.set(String(a.id), a); });
     return m;
   }, [rawData]);
 
-  // Pré-processa: anexa __admName, __aKey, __pKey e aplica STRICT_MODE aqui
   const data = useMemo(() => {
     const prepared = (rawData.grupos || []).map(g => {
       const admName = adminNameFromGroup(g, administradorasMap);
@@ -153,18 +148,15 @@ export default function Home() {
     return { administradoras: rawData.administradoras, grupos };
   }, [rawData, administradorasMap]);
 
-  // Lista já filtrada (interseção)
   const filtered = useMemo(() => {
     return (data.grupos || []).filter(g => matchGroup(g, filters));
   }, [data, filters]);
 
-  // Selecionados para comparar (apenas do conjunto filtrado)
   const selected = useMemo(() => {
     const set = new Set(selectedIds);
     return filtered.filter(g => set.has(g.id)).slice(0, 4);
   }, [selectedIds, filtered]);
 
-  // Toggle compare
   const onToggleCompare = (id) => {
     setSelectedIds(prev => {
       const set = new Set(prev);
@@ -183,7 +175,6 @@ export default function Home() {
         <p className="text-sm text-gray-600">Filtros com interseção de critérios (Admin × Produto × Tipo × Faixas).</p>
       </header>
 
-      {/* Painel de debug: mostra exatamente o que o page.jsx está recebendo */}
       <div className="text-xs p-2 rounded bg-slate-50 border">
         <strong>DEBUG filtros →</strong>{' '}
         {JSON.stringify(filters)}
@@ -191,7 +182,7 @@ export default function Home() {
 
       <Filters data={data} onFilterChange={setFilters} />
 
-      {/* Remount forçado do grid quando os filtros mudam */}
+      {/* Grade dos cards */}
       <div
         key={[
           filters.admKey || '',
@@ -205,12 +196,8 @@ export default function Home() {
         className="grid gap-6 [grid-template-columns:repeat(auto-fit,minmax(404px,1fr))]"
       >
         {filtered.map(g => {
-          // Defesa final: mesmo que algo mude no meio do render, só mostra se casar
           if (!matchGroup(g, filters)) return null;
-
-          // Chave composta para impedir reciclagem errada pelo React
           const compositeKey = `${g.id}::${g.__aKey || ''}::${g.__pKey || ''}`;
-
           return (
             <GroupCard
               key={compositeKey}
@@ -223,6 +210,26 @@ export default function Home() {
           );
         })}
       </div>
+
+      {/* Poupizinho (sticky) quando houver selecionados */}
+      {selected.length > 0 && (
+        <section className="sticky bottom-4 bg-white border rounded-2xl shadow p-4">
+          <div className="flex items-center justify-between gap-4 flex-wrap">
+            <div className="text-sm">
+              <strong>{selected.length}</strong> grupo(s) no comparativo:
+              <span className="ml-2 text-gray-600">
+                {selected.map(s => `#${s.numeroGrupo || s.id}`).join(', ')}
+              </span>
+            </div>
+            <Link
+              href="/compare"
+              className="rounded-xl px-4 py-2 bg-orange-500 text-white hover:bg-orange-600 transition"
+            >
+              Ir para comparar
+            </Link>
+          </div>
+        </section>
+      )}
     </main>
   );
 }
