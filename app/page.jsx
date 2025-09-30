@@ -110,47 +110,58 @@ export default function Home() {
     loadAll();
   }, []);
 
-  // mapa de administradoras por id (para descobrir nome “oficial”)
+  // mapa de administradoras por id
   const administradorasMap = useMemo(() => {
     const m = new Map();
     (rawData?.administradoras || []).forEach(a => { if (a?.id) m.set(String(a.id), a); });
     return m;
   }, [rawData]);
 
-  // PRÉ-PROCESSA grupos: anexa aKey (admin canônica) e pKey (produto canônica)
+  // PRÉ-PROCESSA: anexa __aKey/__pKey e aplica STRICT_MODE logo aqui
   const data = useMemo(() => {
     const prepared = (rawData.grupos || []).map(g => {
       const admName = adminNameFromGroup(g, administradorasMap);
-      const aKey = canonAdmin(admName);   // null se não estiver no catálogo
-      const pKey = canonProduct(g?.produto); // null se não estiver no catálogo
+      const aKey = canonAdmin(admName) || null;
+      const pKey = canonProduct(g?.produto) || null;
       return { ...g, __admName: admName, __aKey: aKey, __pKey: pKey };
     });
 
-    // Se STRICT_MODE: esconda tudo que não mapeia para o catálogo
-    const grupos = STRICT_MODE ? prepared.filter(g => g.__aKey && g.__pKey) : prepared;
+    const grupos = STRICT_MODE
+      ? prepared.filter(g => g.__aKey && g.__pKey)
+      : prepared;
 
     return { administradoras: rawData.administradoras, grupos };
   }, [rawData, administradorasMap]);
 
-  /* ---------- aplica filtros como interseção ---------- */
+  /* ---------- aplica filtros (recalcula aKey/pKey por segurança) ---------- */
   const filtered = useMemo(() => {
     const { minCarta, maxCarta, admKey, produtoKey, tipoGrupo, lanceMin, prazo } = filters || {};
+
     return (data.grupos || []).filter(g => {
+      // (redundância) recalcula canônicos a partir dos valores exibidos
+      const aKey = g.__aKey || canonAdmin(g.__admName) || canonAdmin(
+        administradorasMap.get(String(g?.administradoraId))?.nome || ''
+      ) || null;
+
+      const pKey = g.__pKey || canonProduct(g?.produto) || null;
+
+      // STRICT_MODE: se não mapear pro catálogo, nunca entra
+      if (STRICT_MODE && (!aKey || !pKey)) return false;
+
       // Numéricos
       const okMin   = minCarta == null ? true : Number(g?.valorCarta ?? 0)  >= Number(minCarta);
       const okMax   = maxCarta == null ? true : Number(g?.valorCarta ?? 0)  <= Number(maxCarta);
       const okLance = lanceMin == null ? true : Number(g?.lanceMedio ?? 0) >= Number(lanceMin);
       const okPrazo = prazo == null    ? true : Number(g?.prazo ?? 0)      === Number(prazo);
 
-      // Chaves canônicas já pré-calculadas
-      const okAdm   = !admKey     ? true : String(g.__aKey) === String(admKey);
-      const okProd  = !produtoKey ? true : String(g.__pKey) === String(produtoKey);
-      const okTipo  = !tipoGrupo  ? true : N(g?.tipoGrupo)  === String(tipoGrupo);
+      // Interseção por Admin × Produto × Tipo
+      const okAdm   = !admKey     ? true : String(aKey) === String(admKey);
+      const okProd  = !produtoKey ? true : String(pKey) === String(produtoKey);
+      const okTipo  = !tipoGrupo  ? true : N(g?.tipoGrupo) === String(tipoGrupo);
 
-      // Interseção de todos os critérios
       return okMin && okMax && okAdm && okProd && okTipo && okLance && okPrazo;
     });
-  }, [filters, data]);
+  }, [filters, data, administradorasMap]);
 
   const selected = useMemo(() => {
     const set = new Set(selectedIds);
@@ -171,24 +182,4 @@ export default function Home() {
   return (
     <main className="container py-6 space-y-6">
       <header>
-        <h1 className="text-2xl font-semibold text-brand-800">Simulador de Consórcio</h1>
-        <p className="text-sm text-gray-600">Filtros com interseção de critérios (Admin × Produto × Tipo × Faixas).</p>
-      </header>
-
-      <Filters data={data} onFilterChange={setFilters} />
-
-      <div className="grid gap-6 [grid-template-columns:repeat(auto-fit,minmax(404px,1fr))]">
-        {filtered.map(g => (
-          <GroupCard
-            key={g.id}
-            group={g}
-            administradoraName={adminLabel(g.__aKey) || g.__admName}
-            productLabel={productLabel(g.__pKey) || g?.produto}
-            inCompare={selectedIds.includes(g.id)}
-            onToggleCompare={() => onToggleCompare(g.id)}
-          />
-        ))}
-      </div>
-    </main>
-  );
-}
+        <h1 className="text-2xl font-semibold text-brand-800">Simulador de Consórcio</
