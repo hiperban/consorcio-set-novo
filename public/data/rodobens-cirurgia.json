@@ -8,7 +8,7 @@
   "grupos": [
     {
       "id": "G-090111-1759268562891",
-      "numeroGrupo": "090111",
+      "numeroGrupo": 090111,
       "administradoraId": "1",
       "produto": "CIRUGIA",
       "tipoGrupo": "PARCELA INTEGRAL",
@@ -18,41 +18,8 @@
       "lanceMedio": 30,
       "lanceEmbutidoPermite": 10,
       "totalParticipantes": 200,
-      "diaAssembleia": "14",
+      "diaAssembleia": 14,
       "prazo": 12,
       "nomeAdministradora": "RODOBENS"
-    },
-    {
-      "id": "G-090111-1759268568211",
-      "numeroGrupo": "090111",
-      "administradoraId": "1",
-      "produto": "CIRUGIA",
-      "tipoGrupo": "PARCELA INTEGRAL",
-      "valorCarta": 14000,
-      "valorParcela": 1413.65,
-      "taxaAdm": 19,
-      "lanceMedio": 30,
-      "lanceEmbutidoPermite": 10,
-      "totalParticipantes": 200,
-      "diaAssembleia": "14",
-      "prazo": 12,
-      "nomeAdministradora": "RODOBENS"
-    },
-    {
-      "id": "G-090111-1759268572755",
-      "numeroGrupo": "090111",
-      "administradoraId": "1",
-      "produto": "CIRUGIA",
-      "tipoGrupo": "PARCELA INTEGRAL",
-      "valorCarta": 16000,
-      "valorParcela": 1615.53,
-      "taxaAdm": 19,
-      "lanceMedio": 30,
-      "lanceEmbutidoPermite": 10,
-      "totalParticipantes": 200,
-      "diaAssembleia": "14",
-      "prazo": 12,
-      "nomeAdministradora": "RODOBENS"
-    }
-  ]
+
 }
