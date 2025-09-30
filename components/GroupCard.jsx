@@ -6,6 +6,11 @@ function formatBRL(n) {
   const v = Number(n) || 0;
   return v.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
 }
+function pct(n) {
+  const v = Number(n);
+  if (!Number.isFinite(v)) return '—';
+  return `${v}%`;
+}
 function N(v){
   return String(v ?? '')
     .normalize('NFD').replace(/[\u0300-\u036f]/g,'')
@@ -25,20 +30,21 @@ export default function GroupCard({
     return new URLSearchParams(window.location.search).has('debug');
   }, []);
 
-  const prazoMeses = group?.prazo ?? '';
-  const taxaAdm = group?.taxaAdm ?? 0;
-  const lanceMedio = group?.lanceMedio ?? 0;
+  const prazoMeses   = Number(group?.prazo ?? 0) || 0;
+  const taxaAdm      = group?.taxaAdm;
+  const lanceMedio   = group?.lanceMedio;
+  const embutido     = group?.embutido;        // pode ser 0
+  const participantes = group?.participantes;  // pode ser 0
+  const assembleiaDia = group?.assembleiaDia;  // pode ser 0
 
   const tipoNorm = N(group?.tipoGrupo);
   const tipoIsIntegral = tipoNorm === 'PARCELA INTEGRAL';
   const tipoIsReduzida = tipoNorm === 'PARCELA REDUZIDA';
-
   const tipoBadgeClass = tipoIsIntegral
     ? 'bg-emerald-100 text-emerald-700 border-emerald-200'
     : tipoIsReduzida
       ? 'bg-rose-100 text-rose-700 border-rose-200'
       : 'bg-slate-100 text-slate-600 border-slate-200';
-
   const tipoLabel = group?.tipoGrupo || '—';
 
   return (
@@ -94,40 +100,37 @@ export default function GroupCard({
 
         <div>
           <div className="text-gray-500">Taxa Adm:</div>
-          <div className="font-medium">{taxaAdm}%</div>
+          <div className="font-medium">{pct(taxaAdm)}</div>
         </div>
         <div>
           <div className="text-gray-500">% Lance Médio:</div>
-          <div className="font-medium">{lanceMedio}%</div>
+          <div className="font-medium">{pct(lanceMedio)}</div>
         </div>
 
         <div>
           <div className="text-gray-500">Prazo:</div>
-          <div className="font-medium">{prazoMeses} meses</div>
+          <div className="font-medium">{prazoMeses ? `${prazoMeses} meses` : '—'}</div>
         </div>
         <div>
           <div className="text-gray-500">Tipo:</div>
           <div className="font-medium">{tipoLabel}</div>
         </div>
 
-        {group?.embutido != null && (
-          <div>
-            <div className="text-gray-500">% Lance Embutido:</div>
-            <div className="font-medium">{group.embutido}%</div>
-          </div>
-        )}
-        {group?.assembleiaDia != null && (
-          <div>
-            <div className="text-gray-500">Assembleia (dia):</div>
-            <div className="font-medium">{group.assembleiaDia}</div>
-          </div>
-        )}
-        {group?.participantes != null && (
-          <div>
-            <div className="text-gray-500">Participantes:</div>
-            <div className="font-medium">{group.participantes}</div>
-          </div>
-        )}
+        {/* === Campos que tinham sumido: agora sempre mostram (com fallback) === */}
+        <div>
+          <div className="text-gray-500">% Lance Embutido:</div>
+          <div className="font-medium">{embutido != null ? pct(embutido) : '—'}</div>
+        </div>
+        <div>
+          <div className="text-gray-500">Participantes:</div>
+          <div className="font-medium">{participantes != null ? participantes : '—'}</div>
+        </div>
+        <div>
+          <div className="text-gray-500">Assembleia (dia):</div>
+          <div className="font-medium">{assembleiaDia != null ? assembleiaDia : '—'}</div>
+        </div>
+        {/* ocupa a coluna faltante pra manter a grade alinhada */}
+        <div />
       </div>
 
       <div className="mt-4 flex items-center justify-between">
