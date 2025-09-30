@@ -1,10 +1,15 @@
 // components/GroupCard.jsx
 'use client';
-import { useMemo, useState } from 'react';
+import { useMemo } from 'react';
 
 function formatBRL(n) {
   const v = Number(n) || 0;
   return v.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
+}
+function N(v){
+  return String(v ?? '')
+    .normalize('NFD').replace(/[\u0300-\u036f]/g,'')
+    .trim().toUpperCase();
 }
 
 export default function GroupCard({
@@ -14,7 +19,7 @@ export default function GroupCard({
   inCompare = false,
   onToggleCompare,
 }) {
-  // Habilita selos de debug com ?debug na URL (opcional)
+  // Debug overlay via ?debug
   const debug = useMemo(() => {
     if (typeof window === 'undefined') return false;
     return new URLSearchParams(window.location.search).has('debug');
@@ -23,6 +28,18 @@ export default function GroupCard({
   const prazoMeses = group?.prazo ?? '';
   const taxaAdm = group?.taxaAdm ?? 0;
   const lanceMedio = group?.lanceMedio ?? 0;
+
+  const tipoNorm = N(group?.tipoGrupo);
+  const tipoIsIntegral = tipoNorm === 'PARCELA INTEGRAL';
+  const tipoIsReduzida = tipoNorm === 'PARCELA REDUZIDA';
+
+  const tipoBadgeClass = tipoIsIntegral
+    ? 'bg-emerald-100 text-emerald-700 border-emerald-200'
+    : tipoIsReduzida
+      ? 'bg-rose-100 text-rose-700 border-rose-200'
+      : 'bg-slate-100 text-slate-600 border-slate-200';
+
+  const tipoLabel = group?.tipoGrupo || '—';
 
   return (
     <article
@@ -40,9 +57,14 @@ export default function GroupCard({
       data-parcela={group?.valorParcela ?? ''}
       data-prazo={prazoMeses}
     >
+      {/* Selo TIPO no canto superior direito */}
+      <div className={`absolute top-3 right-3 px-3 py-1 text-xs font-medium border rounded-full ${tipoBadgeClass}`}>
+        {tipoLabel}
+      </div>
+
       {/* Selo de debug opcional */}
       {debug && (
-        <div className="absolute top-2 right-2 text-[10px] px-2 py-1 rounded-full bg-slate-100 border">
+        <div className="absolute top-3 left-3 text-[10px] px-2 py-1 rounded-full bg-slate-100 border">
           AK:{group?.__aKey || '—'} | PK:{group?.__pKey || '—'}
         </div>
       )}
@@ -85,7 +107,7 @@ export default function GroupCard({
         </div>
         <div>
           <div className="text-gray-500">Tipo:</div>
-          <div className="font-medium">{group?.tipoGrupo || '—'}</div>
+          <div className="font-medium">{tipoLabel}</div>
         </div>
 
         {group?.embutido != null && (
