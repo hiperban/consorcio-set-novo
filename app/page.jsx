@@ -182,4 +182,24 @@ export default function Home() {
   return (
     <main className="container py-6 space-y-6">
       <header>
-        <h1 className="text-2xl font-semibold text-brand-800">Simulador de Consórcio</
+        <h1 className="text-2xl font-semibold text-brand-800">Simulador de Consórcio</h1>
+        <p className="text-sm text-gray-600">Filtros com interseção de critérios (Admin × Produto × Tipo × Faixas).</p>
+      </header>
+
+      <Filters data={data} onFilterChange={setFilters} />
+
+      <div className="grid gap-6 [grid-template-columns:repeat(auto-fit,minmax(404px,1fr))]">
+        {filtered.map(g => (
+          <GroupCard
+            key={g.id}
+            group={g}
+            administradoraName={adminLabel(g.__aKey) || g.__admName}
+            productLabel={productLabel(g.__pKey) || g?.produto}
+            inCompare={selectedIds.includes(g.id)}
+            onToggleCompare={() => onToggleCompare(g.id)}
+          />
+        ))}
+      </div>
+    </main>
+  );
+}
