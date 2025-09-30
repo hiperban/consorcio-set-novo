@@ -1,23 +1,18 @@
+// app/compare/page.jsx
 'use client';
 export const dynamic = 'force-dynamic';
 
 import { useEffect, useMemo, useState } from 'react';
+import { canonProduct, productLabel, canonAdmin, adminLabel, STRICT_MODE } from '@/config/catalog';
 
-/* Helpers */
-function N(v) {
+function N(v){
   return String(v ?? '')
     .normalize('NFD')
     .replace(/[\u0300-\u036f]/g, '')
     .trim()
     .toUpperCase();
 }
-function toTitle(s) {
-  return String(s || '')
-    .toLowerCase()
-    .replace(/(^|[\s_-])([a-zà-ú])/g, (_, p, c) => p + c.toUpperCase());
-}
 
-/** Junta vários datasets do /public/data com sanitização */
 function mergeDatasets(list) {
   const admMap = new Map();
   const grupos = [];
@@ -42,6 +37,7 @@ function mergeDatasets(list) {
         id,
         administradoraId,
         produto,
+        tipoGrupo: String(g?.tipoGrupo || '').trim(),
         valorCarta: Number(g?.valorCarta ?? 0),
         valorParcela: Number(g?.valorParcela ?? 0),
         taxaAdm: Number(g?.taxaAdm ?? 0),
@@ -84,7 +80,6 @@ export default function ComparePage() {
 
         setData(mergeDatasets(ok));
 
-        // recuperar seleção
         try {
           const raw = localStorage.getItem('compareSelection');
           if (raw) setSelectedIds(JSON.parse(raw));
@@ -97,31 +92,51 @@ export default function ComparePage() {
     loadAll();
   }, []);
 
+  const administradorasMap = useMemo(() => {
+    const m = new Map();
+    (data?.administradoras || []).forEach(a => { if (a?.id) m.set(String(a.id), a); });
+    return m;
+  }, [data]);
+
   const selected = useMemo(() => {
     const set = new Set(selectedIds);
-    return (data.grupos || []).filter(g => set.has(g.id)).slice(0, 4);
-  }, [data, selectedIds]);
+    const arr = (data.grupos || []).filter(g => set.has(g.id));
+
+    // STRICT_MODE: filtra apenas os que pertencem ao catálogo
+    return arr.filter(g => {
+      const admName = administradorasMap.get(String(g.administradoraId))?.nome || g?.nomeAdministradora || '';
+      const aKey = canonAdmin(admName);
+      const pKey = canonProduct(g?.produto);
+      return !STRICT_MODE || (aKey && pKey);
+    }).slice(0, 4);
+  }, [data, selectedIds, administradorasMap]);
 
   return (
     <main className="container py-6 space-y-6">
       <h1 className="text-2xl font-semibold text-brand-800">Comparar Selecionados</h1>
       {selected.length === 0 ? (
-        <p className="text-gray-600">Você ainda não selecionou grupos para comparar.</p>
+        <p className="text-gray-600">Você ainda não selecionou grupos compatíveis com o catálogo.</p>
       ) : (
         <div className="grid gap-6 [grid-template-columns:repeat(auto-fit,minmax(320px,1fr))]">
-          {selected.map(g => (
-            <div key={g.id} className="border rounded-2xl p-4">
-              <div className="text-sm text-gray-500">Grupo #{g.numeroGrupo || g.id}</div>
-              <div className="text-lg font-medium">{toTitle(g.produto)}</div>
-              <div className="mt-2 grid grid-cols-2 gap-2 text-sm">
-                <div><span className="text-gray-500">Carta:</span> R$ {Number(g.valorCarta).toLocaleString('pt-BR')}</div>
-                <div><span className="text-gray-500">Parcela:</span> R$ {Number(g.valorParcela).toLocaleString('pt-BR')}</div>
-                <div><span className="text-gray-500">Prazo:</span> {g.prazo} meses</div>
-                <div><span className="text-gray-500">Taxa Adm:</span> {g.taxaAdm}%</div>
-                <div><span className="text-gray-500">Lance Médio:</span> {g.lanceMedio}%</div>
+          {selected.map(g => {
+            const admName = administradorasMap.get(String(g.administradoraId))?.nome || g?.nomeAdministradora || '';
+            const aKey = canonAdmin(admName);
+            const pKey = canonProduct(g?.produto);
+            return (
+              <div key={g.id} className="border rounded-2xl p-4">
+                <div className="text-sm text-gray-500">Grupo #{g.numeroGrupo || g.id}</div>
+                <div className="text-lg font-medium">{productLabel(pKey) || g?.produto}</div>
+                <div className="mt-2 grid grid-cols-2 gap-2 text-sm">
+                  <div><span className="text-gray-500">Carta:</span> R$ {Number(g.valorCarta).toLocaleString('pt-BR')}</div>
+                  <div><span className="text-gray-500">Parcela:</span> R$ {Number(g.valorParcela).toLocaleString('pt-BR')}</div>
+                  <div><span className="text-gray-500">Prazo:</span> {g.prazo} meses</div>
+                  <div><span className="text-gray-500">Taxa Adm:</span> {g.taxaAdm}%</div>
+                  <div><span className="text-gray-500">Lance Médio:</span> {g.lanceMedio}%</div>
+                  <div><span className="text-gray-500">Administradora:</span> {adminLabel(aKey) || admName}</div>
+                </div>
               </div>
-            </div>
-          ))}
+            );
+          })}
         </div>
       )}
     </main>
