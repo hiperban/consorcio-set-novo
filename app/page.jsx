@@ -65,6 +65,27 @@ function adminNameFromGroup(g, administradorasMap){
   return byId || g?.nomeAdministradora || '';
 }
 
+/* === Regra ÚNICA de casamento de filtros === */
+function matchGroup(g, filters) {
+  const { minCarta, maxCarta, admKey, produtoKey, tipoGrupo, lanceMin, prazo } = filters || {};
+
+  const aKey = g.__aKey; // já pré-calculado
+  const pKey = g.__pKey;
+
+  if (STRICT_MODE && (!aKey || !pKey)) return false;
+
+  const okAdm   = !admKey     ? true : String(aKey) === String(admKey);
+  const okProd  = !produtoKey ? true : String(pKey) === String(produtoKey);
+  const okTipo  = !tipoGrupo  ? true : N(g?.tipoGrupo) === String(tipoGrupo);
+
+  const okMin   = minCarta == null ? true : Number(g?.valorCarta ?? 0)  >= Number(minCarta);
+  const okMax   = maxCarta == null ? true : Number(g?.valorCarta ?? 0)  <= Number(maxCarta);
+  const okLance = lanceMin == null ? true : Number(g?.lanceMedio ?? 0) >= Number(lanceMin);
+  const okPrazo = prazo == null    ? true : Number(g?.prazo ?? 0)      === Number(prazo);
+
+  return okAdm && okProd && okTipo && okMin && okMax && okLance && okPrazo;
+}
+
 export default function Home() {
   const [rawData, setRawData] = useState({ administradoras: [], grupos: [] });
   const [filters, setFilters] = useState({});
@@ -117,7 +138,7 @@ export default function Home() {
     return m;
   }, [rawData]);
 
-  // PRÉ-PROCESSA: anexa __aKey/__pKey e aplica STRICT_MODE logo aqui
+  // PRÉ-PROCESSA: anexa __admName, __aKey, __pKey e aplica STRICT_MODE nessa etapa
   const data = useMemo(() => {
     const prepared = (rawData.grupos || []).map(g => {
       const admName = adminNameFromGroup(g, administradorasMap);
@@ -133,40 +154,16 @@ export default function Home() {
     return { administradoras: rawData.administradoras, grupos };
   }, [rawData, administradorasMap]);
 
-  /* ---------- aplica filtros (recalcula aKey/pKey por segurança) ---------- */
+  /* ---------- lista filtrada ---------- */
   const filtered = useMemo(() => {
-    const { minCarta, maxCarta, admKey, produtoKey, tipoGrupo, lanceMin, prazo } = filters || {};
+    return (data.grupos || []).filter(g => matchGroup(g, filters));
+  }, [data, filters]);
 
-    return (data.grupos || []).filter(g => {
-      // (redundância) recalcula canônicos a partir dos valores exibidos
-      const aKey = g.__aKey || canonAdmin(g.__admName) || canonAdmin(
-        administradorasMap.get(String(g?.administradoraId))?.nome || ''
-      ) || null;
-
-      const pKey = g.__pKey || canonProduct(g?.produto) || null;
-
-      // STRICT_MODE: se não mapear pro catálogo, nunca entra
-      if (STRICT_MODE && (!aKey || !pKey)) return false;
-
-      // Numéricos
-      const okMin   = minCarta == null ? true : Number(g?.valorCarta ?? 0)  >= Number(minCarta);
-      const okMax   = maxCarta == null ? true : Number(g?.valorCarta ?? 0)  <= Number(maxCarta);
-      const okLance = lanceMin == null ? true : Number(g?.lanceMedio ?? 0) >= Number(lanceMin);
-      const okPrazo = prazo == null    ? true : Number(g?.prazo ?? 0)      === Number(prazo);
-
-      // Interseção por Admin × Produto × Tipo
-      const okAdm   = !admKey     ? true : String(aKey) === String(admKey);
-      const okProd  = !produtoKey ? true : String(pKey) === String(produtoKey);
-      const okTipo  = !tipoGrupo  ? true : N(g?.tipoGrupo) === String(tipoGrupo);
-
-      return okMin && okMax && okAdm && okProd && okTipo && okLance && okPrazo;
-    });
-  }, [filters, data, administradorasMap]);
-
+  /* ---------- seleção para comparar ---------- */
   const selected = useMemo(() => {
     const set = new Set(selectedIds);
-    return (data.grupos || []).filter(g => set.has(g.id)).slice(0, 4);
-  }, [selectedIds, data]);
+    return filtered.filter(g => set.has(g.id)).slice(0, 4);
+  }, [selectedIds, filtered]);
 
   const onToggleCompare = (id) => {
     setSelectedIds(prev => {
@@ -189,16 +186,20 @@ export default function Home() {
       <Filters data={data} onFilterChange={setFilters} />
 
       <div className="grid gap-6 [grid-template-columns:repeat(auto-fit,minmax(404px,1fr))]">
-        {filtered.map(g => (
-          <GroupCard
-            key={g.id}
-            group={g}
-            administradoraName={adminLabel(g.__aKey) || g.__admName}
-            productLabel={productLabel(g.__pKey) || g?.produto}
-            inCompare={selectedIds.includes(g.id)}
-            onToggleCompare={() => onToggleCompare(g.id)}
-          />
-        ))}
+        {filtered.map(g => {
+          // *** Garantia extra ***: não renderiza se não casar os filtros
+          if (!matchGroup(g, filters)) return null;
+          return (
+            <GroupCard
+              key={g.id}
+              group={g}
+              administradoraName={adminLabel(g.__aKey) || g.__admName}
+              productLabel={productLabel(g.__pKey) || g?.produto}
+              inCompare={selectedIds.includes(g.id)}
+              onToggleCompare={() => onToggleCompare(g.id)}
+            />
+          );
+        })}
       </div>
     </main>
   );
