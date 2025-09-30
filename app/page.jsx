@@ -137,4 +137,76 @@ export default function Home() {
     return m;
   }, [rawData]);
 
-  // Pré-process
+  // Pré-processa: anexa __admName, __aKey, __pKey e aplica STRICT_MODE aqui
+  const data = useMemo(() => {
+    const prepared = (rawData.grupos || []).map(g => {
+      const admName = adminNameFromGroup(g, administradorasMap);
+      const aKey = canonAdmin(admName) || null;
+      const pKey = canonProduct(g?.produto) || null;
+      return { ...g, __admName: admName, __aKey: aKey, __pKey: pKey };
+    });
+
+    const grupos = STRICT_MODE
+      ? prepared.filter(g => g.__aKey && g.__pKey)
+      : prepared;
+
+    return { administradoras: rawData.administradoras, grupos };
+  }, [rawData, administradorasMap]);
+
+  // Lista já filtrada (interseção)
+  const filtered = useMemo(() => {
+    return (data.grupos || []).filter(g => matchGroup(g, filters));
+  }, [data, filters]);
+
+  // Selecionados para comparar (apenas do conjunto filtrado)
+  const selected = useMemo(() => {
+    const set = new Set(selectedIds);
+    return filtered.filter(g => set.has(g.id)).slice(0, 4);
+  }, [selectedIds, filtered]);
+
+  // Toggle compare
+  const onToggleCompare = (id) => {
+    setSelectedIds(prev => {
+      const set = new Set(prev);
+      if (set.has(id)) set.delete(id);
+      else if (set.size < 4) set.add(id);
+      const arr = Array.from(set);
+      try { localStorage.setItem('compareSelection', JSON.stringify(arr)); } catch {}
+      return arr;
+    });
+  };
+
+  return (
+    <main className="container py-6 space-y-6">
+      <header>
+        <h1 className="text-2xl font-semibold text-brand-800">Simulador de Consórcio</h1>
+        <p className="text-sm text-gray-600">Filtros com interseção de critérios (Admin × Produto × Tipo × Faixas).</p>
+      </header>
+
+      {/* Painel de debug: mostra exatamente o que o page.jsx está recebendo */}
+      <div className="text-xs p-2 rounded bg-slate-50 border">
+        <strong>DEBUG filtros →</strong>{' '}
+        {JSON.stringify(filters)}
+      </div>
+
+      <Filters data={data} onFilterChange={setFilters} />
+
+      <div className="grid gap-6 [grid-template-columns:repeat(auto-fit,minmax(404px,1fr))]">
+        {filtered.map(g => {
+          // Defesa final: mesmo que algo mude no meio do render, só mostra se casar
+          if (!matchGroup(g, filters)) return null;
+          return (
+            <GroupCard
+              key={g.id}
+              group={g}
+              administradoraName={adminLabel(g.__aKey) || g.__admName}
+              productLabel={productLabel(g.__pKey) || g?.produto}
+              inCompare={selectedIds.includes(g.id)}
+              onToggleCompare={() => onToggleCompare(g.id)}
+            />
+          );
+        })}
+      </div>
+    </main>
+  );
+}
