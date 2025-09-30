@@ -19,7 +19,7 @@ function N(v) {
     .toUpperCase();
 }
 
-/* Merge + sanitização básica */
+/* Junta datasets com sanitização básica */
 function mergeDatasets(list) {
   const admMap = new Map(); // id -> {id,nome}
   const grupos = [];
@@ -65,11 +65,10 @@ function adminNameFromGroup(g, administradorasMap){
   return byId || g?.nomeAdministradora || '';
 }
 
-/* === Regra ÚNICA de casamento de filtros === */
+/* Regra única de casamento de filtros (usada no useMemo e também no render) */
 function matchGroup(g, filters) {
   const { minCarta, maxCarta, admKey, produtoKey, tipoGrupo, lanceMin, prazo } = filters || {};
-
-  const aKey = g.__aKey; // já pré-calculado
+  const aKey = g.__aKey;
   const pKey = g.__pKey;
 
   if (STRICT_MODE && (!aKey || !pKey)) return false;
@@ -91,7 +90,7 @@ export default function Home() {
   const [filters, setFilters] = useState({});
   const [selectedIds, setSelectedIds] = useState([]);
 
-  // carrega manifest + datasets (tolerante a falhas)
+  // Carrega manifest + datasets (tolerante a falhas)
   useEffect(() => {
     async function loadAll() {
       try {
@@ -131,76 +130,11 @@ export default function Home() {
     loadAll();
   }, []);
 
-  // mapa de administradoras por id
+  // Mapa de administradoras por id (para descobrir o nome “oficial”)
   const administradorasMap = useMemo(() => {
     const m = new Map();
     (rawData?.administradoras || []).forEach(a => { if (a?.id) m.set(String(a.id), a); });
     return m;
   }, [rawData]);
 
-  // PRÉ-PROCESSA: anexa __admName, __aKey, __pKey e aplica STRICT_MODE nessa etapa
-  const data = useMemo(() => {
-    const prepared = (rawData.grupos || []).map(g => {
-      const admName = adminNameFromGroup(g, administradorasMap);
-      const aKey = canonAdmin(admName) || null;
-      const pKey = canonProduct(g?.produto) || null;
-      return { ...g, __admName: admName, __aKey: aKey, __pKey: pKey };
-    });
-
-    const grupos = STRICT_MODE
-      ? prepared.filter(g => g.__aKey && g.__pKey)
-      : prepared;
-
-    return { administradoras: rawData.administradoras, grupos };
-  }, [rawData, administradorasMap]);
-
-  /* ---------- lista filtrada ---------- */
-  const filtered = useMemo(() => {
-    return (data.grupos || []).filter(g => matchGroup(g, filters));
-  }, [data, filters]);
-
-  /* ---------- seleção para comparar ---------- */
-  const selected = useMemo(() => {
-    const set = new Set(selectedIds);
-    return filtered.filter(g => set.has(g.id)).slice(0, 4);
-  }, [selectedIds, filtered]);
-
-  const onToggleCompare = (id) => {
-    setSelectedIds(prev => {
-      const set = new Set(prev);
-      if (set.has(id)) set.delete(id);
-      else if (set.size < 4) set.add(id);
-      const arr = Array.from(set);
-      try { localStorage.setItem('compareSelection', JSON.stringify(arr)); } catch {}
-      return arr;
-    });
-  };
-
-  return (
-    <main className="container py-6 space-y-6">
-      <header>
-        <h1 className="text-2xl font-semibold text-brand-800">Simulador de Consórcio</h1>
-        <p className="text-sm text-gray-600">Filtros com interseção de critérios (Admin × Produto × Tipo × Faixas).</p>
-      </header>
-
-      <Filters data={data} onFilterChange={setFilters} />
-
-      <div className="grid gap-6 [grid-template-columns:repeat(auto-fit,minmax(404px,1fr))]">
-        {filtered.map(g => {
-          // *** Garantia extra ***: não renderiza se não casar os filtros
-          if (!matchGroup(g, filters)) return null;
-          return (
-            <GroupCard
-              key={g.id}
-              group={g}
-              administradoraName={adminLabel(g.__aKey) || g.__admName}
-              productLabel={productLabel(g.__pKey) || g?.produto}
-              inCompare={selectedIds.includes(g.id)}
-              onToggleCompare={() => onToggleCompare(g.id)}
-            />
-          );
-        })}
-      </div>
-    </main>
-  );
-}
+  // Pré-process
