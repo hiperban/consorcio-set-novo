@@ -202,7 +202,7 @@ export default function AdminForm({ initialData }){
           <select className="border rounded-2xl px-3 py-2"
                   value={groupForm.produto}
                   onChange={e=>setGroupForm({...groupForm,produto:e.target.value})}>
-            {['AUTOMOVEL','SERVIÇOS','MOTO','IMOVEL','CAMINHÃO','OUTROS BENS'].map(p=>(<option key={p} value={p}>{p}</option>))}
+            {['AUTOMOVEL','SERVIÇOS','MOTO','IMOVEL','CAMINHÃO','CIRUGIA','OUTROS BENS'].map(p=>(<option key={p} value={p}>{p}</option>))}
           </select>
           <select className="border rounded-2xl px-3 py-2"
                   value={groupForm.tipoGrupo}
