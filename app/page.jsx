@@ -162,4 +162,88 @@ export default function Home() {
   // Selecionados para comparar (apenas do conjunto filtrado)
   const selected = useMemo(() => {
     const set = new Set(selectedIds);
-    r
+    return filtered.filter(g => set.has(g.id)).slice(0, 4);
+  }, [selectedIds, filtered]);
+
+  // Toggle compare
+  const onToggleCompare = (id) => {
+    setSelectedIds(prev => {
+      const set = new Set(prev);
+      if (set.has(id)) set.delete(id);
+      else if (set.size < 4) set.add(id);
+      const arr = Array.from(set);
+      try { localStorage.setItem('compareSelection', JSON.stringify(arr)); } catch {}
+      return arr;
+    });
+  };
+
+  return (
+    <main className="container py-6 space-y-6">
+      <header>
+        <h1 className="text-2xl font-semibold text-brand-800">Simulador de Consórcio</h1>
+        <p className="text-sm text-gray-600">Filtros com interseção de critérios (Admin × Produto × Tipo × Faixas).</p>
+      </header>
+
+      {/* Painel de debug: mostra exatamente o que o page.jsx está recebendo */}
+      <div className="text-xs p-2 rounded bg-slate-50 border">
+        <strong>DEBUG filtros →</strong>{' '}
+        {JSON.stringify(filters)}
+      </div>
+
+      <Filters data={data} onFilterChange={setFilters} />
+
+      {/* Remount forçado do grid quando os filtros mudam */}
+      <div
+        key={[
+          filters.admKey || '',
+          filters.produtoKey || '',
+          filters.tipoGrupo || '',
+          filters.minCarta ?? '',
+          filters.maxCarta ?? '',
+          filters.lanceMin ?? '',
+          filters.prazo ?? '',
+        ].join('|')}
+        className="grid gap-6 [grid-template-columns:repeat(auto-fit,minmax(404px,1fr))]"
+      >
+        {filtered.map(g => {
+          // Defesa final: mesmo que algo mude no meio do render, só mostra se casar
+          if (!matchGroup(g, filters)) return null;
+
+          // Chave composta para impedir reciclagem errada pelo React
+          const compositeKey = `${g.id}::${g.__aKey || ''}::${g.__pKey || ''}`;
+
+          return (
+            <GroupCard
+              key={compositeKey}
+              group={g}
+              administradoraName={adminLabel(g.__aKey) || g.__admName}
+              productLabel={productLabel(g.__pKey) || g?.produto}
+              inCompare={selectedIds.includes(g.id)}
+              onToggleCompare={() => onToggleCompare(g.id)}
+            />
+          );
+        })}
+      </div>
+
+      {/* Poupizinho (sticky) quando houver selecionados */}
+      {selected.length > 0 && (
+        <section className="sticky bottom-4 bg-white border rounded-2xl shadow p-4">
+          <div className="flex items-center justify-between gap-4 flex-wrap">
+            <div className="text-sm">
+              <strong>{selected.length}</strong> grupo(s) no comparativo:
+              <span className="ml-2 text-gray-600">
+                {selected.map(s => `#${s.numeroGrupo || s.id}`).join(', ')}
+              </span>
+            </div>
+            <Link
+              href="/compare"
+              className="rounded-xl px-4 py-2 bg-orange-500 text-white hover:bg-orange-600 transition"
+            >
+              Ir para comparar
+            </Link>
+          </div>
+        </section>
+      )}
+    </main>
+  );
+}
