@@ -1,4 +1,3 @@
-// app/page.jsx
 'use client';
 export const dynamic = 'force-dynamic';
 
@@ -67,17 +66,11 @@ function adminNameFromGroup(g, administradorasMap){
 }
 
 export default function Home() {
-  const [data, setData] = useState({ administradoras: [], grupos: [] });
+  const [rawData, setRawData] = useState({ administradoras: [], grupos: [] });
   const [filters, setFilters] = useState({});
   const [selectedIds, setSelectedIds] = useState([]);
 
-  const administradorasMap = useMemo(() => {
-    const m = new Map();
-    (data?.administradoras || []).forEach(a => { if (a?.id) m.set(String(a.id), a); });
-    return m;
-  }, [data]);
-
-  // Carrega manifest + datasets (tolerante a falhas)
+  // carrega manifest + datasets (tolerante a falhas)
   useEffect(() => {
     async function loadAll() {
       try {
@@ -103,7 +96,7 @@ export default function Home() {
           .filter(r => r.status === 'rejected')
           .forEach(r => console.warn('[Dataset ignorado]', r.reason));
 
-        setData(mergeDatasets(ok));
+        setRawData(mergeDatasets(ok));
 
         try {
           const raw = localStorage.getItem('compareSelection');
@@ -111,39 +104,53 @@ export default function Home() {
         } catch {}
       } catch (e) {
         console.error('Erro ao carregar datasets:', e);
-        setData({ administradoras: [], grupos: [] });
+        setRawData({ administradoras: [], grupos: [] });
       }
     }
     loadAll();
   }, []);
 
-  /* ---------- aplica filtros com catálogo fixo ---------- */
+  // mapa de administradoras por id (para descobrir nome “oficial”)
+  const administradorasMap = useMemo(() => {
+    const m = new Map();
+    (rawData?.administradoras || []).forEach(a => { if (a?.id) m.set(String(a.id), a); });
+    return m;
+  }, [rawData]);
+
+  // PRÉ-PROCESSA grupos: anexa aKey (admin canônica) e pKey (produto canônica)
+  const data = useMemo(() => {
+    const prepared = (rawData.grupos || []).map(g => {
+      const admName = adminNameFromGroup(g, administradorasMap);
+      const aKey = canonAdmin(admName);   // null se não estiver no catálogo
+      const pKey = canonProduct(g?.produto); // null se não estiver no catálogo
+      return { ...g, __admName: admName, __aKey: aKey, __pKey: pKey };
+    });
+
+    // Se STRICT_MODE: esconda tudo que não mapeia para o catálogo
+    const grupos = STRICT_MODE ? prepared.filter(g => g.__aKey && g.__pKey) : prepared;
+
+    return { administradoras: rawData.administradoras, grupos };
+  }, [rawData, administradorasMap]);
+
+  /* ---------- aplica filtros como interseção ---------- */
   const filtered = useMemo(() => {
     const { minCarta, maxCarta, admKey, produtoKey, tipoGrupo, lanceMin, prazo } = filters || {};
     return (data.grupos || []).filter(g => {
-      // Canonizações
-      const gAdmName = adminNameFromGroup(g, administradorasMap);
-      const gAdmKey  = canonAdmin(gAdmName);            // null se não estiver no catálogo
-      const gProdKey = canonProduct(g?.produto);        // null se não estiver no catálogo
-
-      // STRICT: oculta grupos desconhecidos (fora do catálogo)
-      const okStrict = !STRICT_MODE ? true : (Boolean(gAdmKey) && Boolean(gProdKey));
-      if (!okStrict) return false;
-
       // Numéricos
       const okMin   = minCarta == null ? true : Number(g?.valorCarta ?? 0)  >= Number(minCarta);
       const okMax   = maxCarta == null ? true : Number(g?.valorCarta ?? 0)  <= Number(maxCarta);
       const okLance = lanceMin == null ? true : Number(g?.lanceMedio ?? 0) >= Number(lanceMin);
       const okPrazo = prazo == null    ? true : Number(g?.prazo ?? 0)      === Number(prazo);
 
-      // Filtros por chave canônica
-      const okAdm   = !admKey     ? true : String(gAdmKey)  === String(admKey);
-      const okProd  = !produtoKey ? true : String(gProdKey) === String(produtoKey);
+      // Chaves canônicas já pré-calculadas
+      const okAdm   = !admKey     ? true : String(g.__aKey) === String(admKey);
+      const okProd  = !produtoKey ? true : String(g.__pKey) === String(produtoKey);
       const okTipo  = !tipoGrupo  ? true : N(g?.tipoGrupo)  === String(tipoGrupo);
 
+      // Interseção de todos os critérios
       return okMin && okMax && okAdm && okProd && okTipo && okLance && okPrazo;
     });
-  }, [filters, data, administradorasMap]);
+  }, [filters, data]);
 
   const selected = useMemo(() => {
     const set = new Set(selectedIds);
@@ -165,27 +172,22 @@ export default function Home() {
     <main className="container py-6 space-y-6">
       <header>
         <h1 className="text-2xl font-semibold text-brand-800">Simulador de Consórcio</h1>
-        <p className="text-sm text-gray-600">Filtros travados pelo catálogo de Admin/Produto.</p>
+        <p className="text-sm text-gray-600">Filtros com interseção de critérios (Admin × Produto × Tipo × Faixas).</p>
       </header>
 
       <Filters data={data} onFilterChange={setFilters} />
 
       <div className="grid gap-6 [grid-template-columns:repeat(auto-fit,minmax(404px,1fr))]">
-        {filtered.map(g => {
-          const admName = adminNameFromGroup(g, administradorasMap);
-          const admKey  = canonAdmin(admName);
-          const prodKey = canonProduct(g?.produto);
-          return (
-            <GroupCard
-              key={g.id}
-              group={g}
-              administradoraName={adminLabel(admKey) || admName}
-              productLabel={productLabel(prodKey) || g?.produto}
-              inCompare={selectedIds.includes(g.id)}
-              onToggleCompare={() => onToggleCompare(g.id)}
-            />
-          );
-        })}
+        {filtered.map(g => (
+          <GroupCard
+            key={g.id}
+            group={g}
+            administradoraName={adminLabel(g.__aKey) || g.__admName}
+            productLabel={productLabel(g.__pKey) || g?.produto}
+            inCompare={selectedIds.includes(g.id)}
+            onToggleCompare={() => onToggleCompare(g.id)}
+          />
+        ))}
       </div>
     </main>
   );
