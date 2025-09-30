@@ -191,13 +191,29 @@ export default function Home() {
 
       <Filters data={data} onFilterChange={setFilters} />
 
-      <div className="grid gap-6 [grid-template-columns:repeat(auto-fit,minmax(404px,1fr))]">
+      {/* Remount forçado do grid quando os filtros mudam */}
+      <div
+        key={[
+          filters.admKey || '',
+          filters.produtoKey || '',
+          filters.tipoGrupo || '',
+          filters.minCarta ?? '',
+          filters.maxCarta ?? '',
+          filters.lanceMin ?? '',
+          filters.prazo ?? '',
+        ].join('|')}
+        className="grid gap-6 [grid-template-columns:repeat(auto-fit,minmax(404px,1fr))]"
+      >
         {filtered.map(g => {
           // Defesa final: mesmo que algo mude no meio do render, só mostra se casar
           if (!matchGroup(g, filters)) return null;
+
+          // Chave composta para impedir reciclagem errada pelo React
+          const compositeKey = `${g.id}::${g.__aKey || ''}::${g.__pKey || ''}`;
+
           return (
             <GroupCard
-              key={g.id}
+              key={compositeKey}
               group={g}
               administradoraName={adminLabel(g.__aKey) || g.__admName}
               productLabel={productLabel(g.__pKey) || g?.produto}
