@@ -215,7 +215,7 @@ export default function ComparePage(){
             <thead>
               <tr>
                 <th className="sticky left-0 z-10 bg-white border-b px-4 py-3 text-left text-xs uppercase tracking-wider text-gray-500">
-                  Atributo
+                  DADOS
                 </th>
                 {cols.map((g, idx) => (
                   <th key={g.id || idx} className="border-b px-4 py-3 text-left">
