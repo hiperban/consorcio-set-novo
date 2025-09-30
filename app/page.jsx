@@ -91,6 +91,14 @@ export default function Home() {
   const [filters, setFilters] = useState({});
   const [selectedIds, setSelectedIds] = useState([]);
 
+  // controla exibição do painel de debug via ?debug
+  const [showDebug, setShowDebug] = useState(false);
+  useEffect(() => {
+    try {
+      setShowDebug(new URLSearchParams(window.location.search).has('debug'));
+    } catch {}
+  }, []);
+
   // Carrega manifest + datasets (tolerante a falhas)
   useEffect(() => {
     async function loadAll() {
@@ -184,11 +192,13 @@ export default function Home() {
         <p className="text-sm text-gray-600">Filtros com interseção de critérios (Admin × Produto × Tipo × Faixas).</p>
       </header>
 
-      {/* Painel de debug: mostra exatamente o que o page.jsx está recebendo */}
-      <div className="text-xs p-2 rounded bg-slate-50 border">
-        <strong>DEBUG filtros →</strong>{' '}
-        {JSON.stringify(filters)}
-      </div>
+      {/* Painel de debug: só aparece com ?debug */}
+      {showDebug && (
+        <div className="text-xs p-2 rounded bg-slate-50 border">
+          <strong>DEBUG filtros →</strong>{' '}
+          {JSON.stringify(filters)}
+        </div>
+      )}
 
       <Filters data={data} onFilterChange={setFilters} />
 
