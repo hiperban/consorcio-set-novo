@@ -1,28 +1,55 @@
+// app/compare/page.jsx
 'use client';
 export const dynamic = 'force-dynamic';
 
 import { useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
-import Filters from '@/components/Filters';
-import GroupCard from '@/components/GroupCard';
 import {
   STRICT_MODE,
   canonProduct, productLabel,
   canonAdmin,   adminLabel,
 } from '@/config/catalog';
 
-function N(v) {
+/* ========= Helpers ========= */
+function N(v){
   return String(v ?? '')
-    .normalize('NFD')
-    .replace(/[\u0300-\u036f]/g, '')
-    .trim()
-    .toUpperCase();
+    .normalize('NFD').replace(/[\u0300-\u036f]/g,'')
+    .trim().toUpperCase();
+}
+function formatBRL(n){
+  const v = Number(n) || 0;
+  return v.toLocaleString('pt-BR', { style:'currency', currency:'BRL' });
+}
+function pct(n){
+  const v = Number(n);
+  if (!Number.isFinite(v)) return '—';
+  return `${v}%`;
 }
 
+/* ======= Config: quais métricas “melhor” ======= */
+const ROWS = [
+  { key: 'administradora', label: 'Administradora', fmt: (g)=> (g.__aKey ? adminLabel(g.__aKey) : g.__admName) },
+  { key: 'produto',        label: 'Produto',        fmt: (g)=> (g.__pKey ? productLabel(g.__pKey) : g.produto) },
+  { key: 'tipoGrupo',      label: 'Tipo',           fmt: (g)=> g?.tipoGrupo || '—' },
+
+  // Comparáveis (destacam o melhor):
+  { key: 'valorCarta',   label: 'Valor Carta',    fmt: (g)=> formatBRL(g?.valorCarta),    better: 'max' },
+  { key: 'valorParcela', label: 'Parcela',        fmt: (g)=> formatBRL(g?.valorParcela),  better: 'min' },
+  { key: 'prazo',        label: 'Prazo (meses)',  fmt: (g)=> `${g?.prazo ?? '—'}`,        better: 'min' },
+  { key: 'taxaAdm',      label: 'Taxa Adm',       fmt: (g)=> pct(g?.taxaAdm),             better: 'min' },
+  { key: 'lanceMedio',   label: '% Lance Médio',  fmt: (g)=> pct(g?.lanceMedio),          better: 'min' },
+  { key: 'embutido',     label: '% Lance Embutido', fmt: (g)=> g?.embutido!=null ? pct(g.embutido) : '—', better: 'min' },
+  { key: 'participantes',label: 'Participantes',  fmt: (g)=> g?.participantes ?? '—',     better: 'max' },
+
+  // Extras
+  { key: 'assembleiaDia', label: 'Assembleia (dia)', fmt: (g)=> g?.assembleiaDia ?? '—' },
+  { key: 'numeroGrupo',   label: 'Grupo',            fmt: (g)=> g?.numeroGrupo ?? g?.id ?? '—' },
+];
+
+/* ======= Dados ======= */
 function mergeDatasets(list) {
   const admMap = new Map();
   const grupos = [];
-
   for (const d of list || []) {
     const adms = Array.isArray(d?.administradoras) ? d.administradoras : [];
     const gs   = Array.isArray(d?.grupos) ? d.grupos : [];
@@ -37,82 +64,53 @@ function mergeDatasets(list) {
       const id = String(g?.id || '').trim();
       const administradoraId = String(g?.administradoraId || '').trim();
       const produto = String(g?.produto || '').trim();
-      const tipoGrupo = String(g?.tipoGrupo || '').trim();
       if (!id || !administradoraId || !produto) return;
 
       grupos.push({
         ...g,
         id,
         administradoraId,
-        produto,
-        tipoGrupo,
+        produto: produto,
+        tipoGrupo: String(g?.tipoGrupo || '').trim(),
         valorCarta: Number(g?.valorCarta ?? 0),
         valorParcela: Number(g?.valorParcela ?? 0),
         taxaAdm: Number(g?.taxaAdm ?? 0),
         lanceMedio: Number(g?.lanceMedio ?? 0),
         prazo: Number(g?.prazo ?? 0),
+        embutido: g?.embutido != null ? Number(g.embutido) : null,
+        participantes: g?.participantes != null ? Number(g.participantes) : null,
+        assembleiaDia: g?.assembleiaDia != null ? Number(g.assembleiaDia) : null,
+        numeroGrupo: g?.numeroGrupo,
       });
     });
   }
-
   return { administradoras: Array.from(admMap.values()), grupos };
 }
-
 function adminNameFromGroup(g, administradorasMap){
   const id = String(g?.administradoraId ?? '');
   const byId = administradorasMap.get(id)?.nome;
   return byId || g?.nomeAdministradora || '';
 }
 
-function matchGroup(g, filters) {
-  const { minCarta, maxCarta, admKey, produtoKey, tipoGrupo, lanceMin, prazo } = filters || {};
-  const aKey = g.__aKey;
-  const pKey = g.__pKey;
-
-  if (STRICT_MODE && (!aKey || !pKey)) return false;
-
-  const okAdm   = !admKey     ? true : String(aKey) === String(admKey);
-  const okProd  = !produtoKey ? true : String(pKey) === String(produtoKey);
-  const okTipo  = !tipoGrupo  ? true : N(g?.tipoGrupo) === String(tipoGrupo);
-
-  const okMin   = minCarta == null ? true : Number(g?.valorCarta ?? 0)  >= Number(minCarta);
-  const okMax   = maxCarta == null ? true : Number(g?.valorCarta ?? 0)  <= Number(maxCarta);
-  const okLance = lanceMin == null ? true : Number(g?.lanceMedio ?? 0) >= Number(lanceMin);
-  const okPrazo = prazo == null    ? true : Number(g?.prazo ?? 0)      === Number(prazo);
-
-  return okAdm && okProd && okTipo && okMin && okMax && okLance && okPrazo;
-}
-
-export default function Home() {
+export default function ComparePage(){
   const [rawData, setRawData] = useState({ administradoras: [], grupos: [] });
-  const [filters, setFilters] = useState({});
   const [selectedIds, setSelectedIds] = useState([]);
 
+  // Carrega datasets + recupera seleção
   useEffect(() => {
     async function loadAll() {
       try {
         const man = await fetch('/data/_manifest.json', { cache: 'no-store' }).then(r => r.json());
         const files = Array.isArray(man?.datasets) ? man.datasets : [];
-
         const results = await Promise.allSettled(
           files.map(f =>
             fetch(`/data/${f}`, { cache: 'no-store' })
-              .then(r => {
-                if (!r.ok) throw new Error(`Falha ao baixar ${f}: ${r.status}`);
-                return r.json();
-              })
+              .then(r => { if (!r.ok) throw new Error(`Falha ao baixar ${f}: ${r.status}`); return r.json(); })
               .then(j => ({ file: f, data: j }))
           )
         );
-
-        const ok = results
-          .filter(r => r.status === 'fulfilled')
-          .map(r => r.value.data);
-
-        results
-          .filter(r => r.status === 'rejected')
-          .forEach(r => console.warn('[Dataset ignorado]', r.reason));
-
+        const ok = results.filter(r => r.status === 'fulfilled').map(r => r.value.data);
+        results.filter(r => r.status === 'rejected').forEach(r => console.warn('[Dataset ignorado]', r.reason));
         setRawData(mergeDatasets(ok));
 
         try {
@@ -120,115 +118,131 @@ export default function Home() {
           if (raw) setSelectedIds(JSON.parse(raw));
         } catch {}
       } catch (e) {
-        console.error('Erro ao carregar datasets:', e);
+        console.error(e);
         setRawData({ administradoras: [], grupos: [] });
       }
     }
     loadAll();
   }, []);
 
+  // Mapa de administradoras
   const administradorasMap = useMemo(() => {
     const m = new Map();
     (rawData?.administradoras || []).forEach(a => { if (a?.id) m.set(String(a.id), a); });
     return m;
   }, [rawData]);
 
-  const data = useMemo(() => {
-    const prepared = (rawData.grupos || []).map(g => {
+  // Prepara grupos com chaves canônicas e aplica STRICT_MODE
+  const prepared = useMemo(() => {
+    const arr = (rawData.grupos || []).map(g => {
       const admName = adminNameFromGroup(g, administradorasMap);
       const aKey = canonAdmin(admName) || null;
       const pKey = canonProduct(g?.produto) || null;
       return { ...g, __admName: admName, __aKey: aKey, __pKey: pKey };
     });
-
-    const grupos = STRICT_MODE
-      ? prepared.filter(g => g.__aKey && g.__pKey)
-      : prepared;
-
-    return { administradoras: rawData.administradoras, grupos };
+    return STRICT_MODE ? arr.filter(g => g.__aKey && g.__pKey) : arr;
   }, [rawData, administradorasMap]);
 
-  const filtered = useMemo(() => {
-    return (data.grupos || []).filter(g => matchGroup(g, filters));
-  }, [data, filters]);
-
-  const selected = useMemo(() => {
+  // Pega só os selecionados (até 4)
+  const cols = useMemo(() => {
     const set = new Set(selectedIds);
-    return filtered.filter(g => set.has(g.id)).slice(0, 4);
-  }, [selectedIds, filtered]);
+    return prepared.filter(g => set.has(g.id)).slice(0, 4);
+  }, [prepared, selectedIds]);
 
-  const onToggleCompare = (id) => {
-    setSelectedIds(prev => {
-      const set = new Set(prev);
-      if (set.has(id)) set.delete(id);
-      else if (set.size < 4) set.add(id);
-      const arr = Array.from(set);
-      try { localStorage.setItem('compareSelection', JSON.stringify(arr)); } catch {}
-      return arr;
+  // Ranking dos “melhores” por linha
+  const bestByRow = useMemo(() => {
+    const result = new Map(); // row.key -> Set<indexes melhores>
+    ROWS.forEach(row => {
+      if (!row.better) return; // linhas só exibidas
+      const values = cols.map(g => g[row.key]);
+      const finite = values
+        .map((v, i) => ({ i, v: Number(v) }))
+        .filter(({v}) => Number.isFinite(v));
+      if (finite.length === 0) { result.set(row.key, new Set()); return; }
+
+      let best;
+      if (row.better === 'min') {
+        best = Math.min(...finite.map(x => x.v));
+      } else {
+        best = Math.max(...finite.map(x => x.v));
+      }
+      const winners = new Set(finite.filter(x => x.v === best).map(x => x.i));
+      result.set(row.key, winners);
     });
-  };
+    return result;
+  }, [cols]);
 
   return (
     <main className="container py-6 space-y-6">
-      <header>
-        <h1 className="text-2xl font-semibold text-brand-800">Simulador de Consórcio</h1>
-        <p className="text-sm text-gray-600">Filtros com interseção de critérios (Admin × Produto × Tipo × Faixas).</p>
+      <header className="flex items-center justify-between gap-4">
+        <h1 className="text-2xl font-semibold text-brand-800">Comparar Selecionados</h1>
+        <Link href="/" className="text-sm text-orange-600 hover:underline">← Voltar ao simulador</Link>
       </header>
 
-      <div className="text-xs p-2 rounded bg-slate-50 border">
-        <strong>DEBUG filtros →</strong>{' '}
-        {JSON.stringify(filters)}
-      </div>
+      {cols.length === 0 ? (
+        <p className="text-gray-600">Você ainda não selecionou grupos compatíveis com o catálogo.</p>
+      ) : (
+        <div className="w-full overflow-auto">
+          <table className="w-full border-separate border-spacing-0 rounded-2xl overflow-hidden">
+            <thead>
+              <tr>
+                <th className="sticky left-0 z-10 bg-white border-b px-4 py-3 text-left text-xs uppercase tracking-wider text-gray-500">
+                  Atributo
+                </th>
+                {cols.map((g, idx) => (
+                  <th key={g.id || idx} className="border-b px-4 py-3 text-left">
+                    <div className="text-xs text-gray-500">#{g.numeroGrupo || g.id}</div>
+                    <div className="text-sm font-medium">
+                      {(g.__pKey ? productLabel(g.__pKey) : g.produto) || '—'}
+                    </div>
+                    <div className="text-xs text-gray-500">
+                      {(g.__aKey ? adminLabel(g.__aKey) : g.__admName) || '—'}
+                    </div>
+                  </th>
+                ))}
+              </tr>
+            </thead>
 
-      <Filters data={data} onFilterChange={setFilters} />
+            <tbody>
+              {ROWS.map(row => (
+                <tr key={row.key} className="border-b">
+                  {/* primeira coluna (fixa) */}
+                  <td className="sticky left-0 z-10 bg-white border-b px-4 py-3 text-sm font-medium text-gray-700">
+                    {row.label}
+                  </td>
 
-      {/* Grade dos cards */}
-      <div
-        key={[
-          filters.admKey || '',
-          filters.produtoKey || '',
-          filters.tipoGrupo || '',
-          filters.minCarta ?? '',
-          filters.maxCarta ?? '',
-          filters.lanceMin ?? '',
-          filters.prazo ?? '',
-        ].join('|')}
-        className="grid gap-6 [grid-template-columns:repeat(auto-fit,minmax(404px,1fr))]"
-      >
-        {filtered.map(g => {
-          if (!matchGroup(g, filters)) return null;
-          const compositeKey = `${g.id}::${g.__aKey || ''}::${g.__pKey || ''}`;
-          return (
-            <GroupCard
-              key={compositeKey}
-              group={g}
-              administradoraName={adminLabel(g.__aKey) || g.__admName}
-              productLabel={productLabel(g.__pKey) || g?.produto}
-              inCompare={selectedIds.includes(g.id)}
-              onToggleCompare={() => onToggleCompare(g.id)}
-            />
-          );
-        })}
-      </div>
+                  {/* colunas dos selecionados */}
+                  {cols.map((g, idx) => {
+                    const winners = bestByRow.get(row.key) || new Set();
+                    const isWinner = winners.has(idx);
+                    const val = row.fmt ? row.fmt(g) : (g[row.key] ?? '—');
 
-      {/* Poupizinho (sticky) quando houver selecionados */}
-      {selected.length > 0 && (
-        <section className="sticky bottom-4 bg-white border rounded-2xl shadow p-4">
-          <div className="flex items-center justify-between gap-4 flex-wrap">
-            <div className="text-sm">
-              <strong>{selected.length}</strong> grupo(s) no comparativo:
-              <span className="ml-2 text-gray-600">
-                {selected.map(s => `#${s.numeroGrupo || s.id}`).join(', ')}
-              </span>
-            </div>
-            <Link
-              href="/compare"
-              className="rounded-xl px-4 py-2 bg-orange-500 text-white hover:bg-orange-600 transition"
-            >
-              Ir para comparar
-            </Link>
+                    // destaque verde para vencedor em linhas comparáveis
+                    const base =
+                      row.better
+                        ? (isWinner
+                            ? 'bg-emerald-50 text-emerald-800 border-emerald-100'
+                            : 'bg-white text-gray-800')
+                        : 'bg-white text-gray-800';
+
+                    return (
+                      <td key={`${row.key}::${g.id}`} className={`border-b px-4 py-3 text-sm ${base}`}>
+                        {val}
+                      </td>
+                    );
+                  })}
+                </tr>
+              ))}
+            </tbody>
+          </table>
+
+          <div className="mt-3 text-xs text-gray-500">
+            <span className="inline-block rounded px-2 py-0.5 mr-2 bg-emerald-50 text-emerald-800 border border-emerald-100">
+              destaque
+            </span>
+            indica o/a melhor valor para cada linha (regras: ver “menor é melhor / maior é melhor”).
           </div>
-        </section>
+        </div>
       )}
     </main>
   );
