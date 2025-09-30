@@ -1,27 +1,19 @@
 // middleware.js
-import { NextResponse } from 'next/server';
+import { NextResponse } from 'next/server'
 
 export function middleware(req) {
-  const { pathname, searchParams } = req.nextUrl;
+  const auth = req.headers.get('authorization') || ''
+  const expected = 'Basic ' + Buffer.from(`admin:${process.env.ADMIN_KEY}`).toString('base64')
 
-  // Deixa passar o login e assets
-  if (pathname.startsWith('/admin-login')) return NextResponse.next();
-
-  // Protege tudo sob /admin
-  if (pathname.startsWith('/admin')) {
-    const cookie = req.cookies.get('admin_key')?.value || '';
-    const expected = process.env.ADMIN_KEY || '';
-    if (!expected || cookie !== expected) {
-      const url = req.nextUrl.clone();
-      url.pathname = '/admin-login';
-      url.searchParams.set('next', pathname + (req.nextUrl.search || ''));
-      return NextResponse.redirect(url);
-    }
+  if (!auth || auth !== expected) {
+    return new NextResponse('Auth required', {
+      status: 401,
+      headers: { 'WWW-Authenticate': 'Basic realm="Secure Area"' },
+    })
   }
-
-  return NextResponse.next();
+  return NextResponse.next()
 }
 
 export const config = {
   matcher: ['/admin/:path*', '/admin'],
-};
+}
