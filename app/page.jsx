@@ -1,45 +1,165 @@
-14:39:49.974 Running build in Washington, D.C., USA (East) – iad1
-14:39:49.974 Build machine configuration: 4 cores, 8 GB
-14:39:49.991 Cloning github.com/hiperban/consorcio-set-novo (Branch: main, Commit: 17199fd)
-14:39:50.267 Cloning completed: 276.000ms
-14:39:50.767 Restored build cache from previous deployment (CwP6Ujd5myAXmSJ4AsNgZjtzFhfK)
-14:39:51.071 Running "vercel build"
-14:39:51.478 Vercel CLI 48.1.6
-14:39:51.770 Installing dependencies...
-14:39:52.608 
-14:39:52.608 up to date in 590ms
-14:39:52.608 
-14:39:52.608 35 packages are looking for funding
-14:39:52.608   run `npm fund` for details
-14:39:52.640 Detected Next.js version: 14.2.5
-14:39:52.644 Running "npm run build"
-14:39:52.758 
-14:39:52.758 > hiperban-consorcio-suite@1.0.0 build
-14:39:52.758 > next build
-14:39:52.758 
-14:39:53.493   ▲ Next.js 14.2.5
-14:39:53.493 
-14:39:53.553    Creating an optimized production build ...
-14:39:54.298  ⚠ Found lockfile missing swc dependencies, run next locally to automatically patch
-14:39:55.592 Failed to compile.
-14:39:55.592 
-14:39:55.592 ./app/page.jsx
-14:39:55.592 Error: 
-14:39:55.592   [31mx[0m Unexpected eof
-14:39:55.593      ,-[[36;1;4m/vercel/path0/app/page.jsx[0m:214:1]
-14:39:55.593  [2m214[0m |                       {(g.__pKey ? productLabel(g.__pKey) : g.produto) || '—'}
-14:39:55.593  [2m215[0m |                     </div>
-14:39:55.593  [2m216[0m |                     <div className="text-xs text-gray-500">
-14:39:55.593  [2m217[0m |                       {(g.__aKey ? adminLabel(g.__
-14:39:55.593      : [31;1m                                                  ^[0m
-14:39:55.593      `----
-14:39:55.593 
-14:39:55.593 Caused by:
-14:39:55.593     Syntax Error
-14:39:55.593 
-14:39:55.593 Import trace for requested module:
-14:39:55.593 ./app/page.jsx
-14:39:55.593 
-14:39:55.604 
-14:39:55.604 > Build failed because of webpack errors
-14:39:55.628 Error: Command "npm run build" exited with 1
+'use client';
+export const dynamic = 'force-dynamic';
+
+import { useEffect, useMemo, useState } from 'react';
+import Link from 'next/link';
+import Filters from '@/components/Filters';
+import GroupCard from '@/components/GroupCard';
+import {
+  STRICT_MODE,
+  canonProduct, productLabel,
+  canonAdmin,   adminLabel,
+} from '@/config/catalog';
+
+/* Helpers */
+function N(v) {
+  return String(v ?? '')
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .trim()
+    .toUpperCase();
+}
+
+/* Junta datasets com sanitização básica */
+function mergeDatasets(list) {
+  const admMap = new Map(); // id -> {id,nome}
+  const grupos = [];
+
+  for (const d of list || []) {
+    const adms = Array.isArray(d?.administradoras) ? d.administradoras : [];
+    const gs   = Array.isArray(d?.grupos) ? d.grupos : [];
+
+    adms.forEach(a => {
+      const id = String(a?.id || '').trim();
+      const nome = String(a?.nome || '').trim();
+      if (id && !admMap.has(id)) admMap.set(id, { id, nome });
+    });
+
+    gs.forEach(g => {
+      const id = String(g?.id || '').trim();
+      const administradoraId = String(g?.administradoraId || '').trim();
+      const produto = String(g?.produto || '').trim();
+      const tipoGrupo = String(g?.tipoGrupo || '').trim();
+      if (!id || !administradoraId || !produto) return;
+
+      grupos.push({
+        ...g,
+        id,
+        administradoraId,
+        produto,
+        tipoGrupo,
+        valorCarta: Number(g?.valorCarta ?? 0),
+        valorParcela: Number(g?.valorParcela ?? 0),
+        taxaAdm: Number(g?.taxaAdm ?? 0),
+        lanceMedio: Number(g?.lanceMedio ?? 0),
+        prazo: Number(g?.prazo ?? 0),
+      });
+    });
+  }
+
+  return { administradoras: Array.from(admMap.values()), grupos };
+}
+
+function adminNameFromGroup(g, administradorasMap){
+  const id = String(g?.administradoraId ?? '');
+  const byId = administradorasMap.get(id)?.nome;
+  return byId || g?.nomeAdministradora || '';
+}
+
+/* Regra única de casamento de filtros (usada no useMemo e também no render) */
+function matchGroup(g, filters) {
+  const { minCarta, maxCarta, admKey, produtoKey, tipoGrupo, lanceMin, prazo } = filters || {};
+  const aKey = g.__aKey;
+  const pKey = g.__pKey;
+
+  if (STRICT_MODE && (!aKey || !pKey)) return false;
+
+  const okAdm   = !admKey     ? true : String(aKey) === String(admKey);
+  const okProd  = !produtoKey ? true : String(pKey) === String(produtoKey);
+  const okTipo  = !tipoGrupo  ? true : N(g?.tipoGrupo) === String(tipoGrupo);
+
+  const okMin   = minCarta == null ? true : Number(g?.valorCarta ?? 0)  >= Number(minCarta);
+  const okMax   = maxCarta == null ? true : Number(g?.valorCarta ?? 0)  <= Number(maxCarta);
+  const okLance = lanceMin == null ? true : Number(g?.lanceMedio ?? 0) >= Number(lanceMin);
+  const okPrazo = prazo == null    ? true : Number(g?.prazo ?? 0)      === Number(prazo);
+
+  return okAdm && okProd && okTipo && okMin && okMax && okLance && okPrazo;
+}
+
+export default function Home() {
+  const [rawData, setRawData] = useState({ administradoras: [], grupos: [] });
+  const [filters, setFilters] = useState({});
+  const [selectedIds, setSelectedIds] = useState([]);
+
+  // Carrega manifest + datasets (tolerante a falhas)
+  useEffect(() => {
+    async function loadAll() {
+      try {
+        const man = await fetch('/data/_manifest.json', { cache: 'no-store' }).then(r => r.json());
+        const files = Array.isArray(man?.datasets) ? man.datasets : [];
+
+        const results = await Promise.allSettled(
+          files.map(f =>
+            fetch(`/data/${f}`, { cache: 'no-store' })
+              .then(r => {
+                if (!r.ok) throw new Error(`Falha ao baixar ${f}: ${r.status}`);
+                return r.json();
+              })
+              .then(j => ({ file: f, data: j }))
+          )
+        );
+
+        const ok = results
+          .filter(r => r.status === 'fulfilled')
+          .map(r => r.value.data);
+
+        results
+          .filter(r => r.status === 'rejected')
+          .forEach(r => console.warn('[Dataset ignorado]', r.reason));
+
+        setRawData(mergeDatasets(ok));
+
+        try {
+          const raw = localStorage.getItem('compareSelection');
+          if (raw) setSelectedIds(JSON.parse(raw));
+        } catch {}
+      } catch (e) {
+        console.error('Erro ao carregar datasets:', e);
+        setRawData({ administradoras: [], grupos: [] });
+      }
+    }
+    loadAll();
+  }, []);
+
+  // Mapa de administradoras por id (para descobrir o nome “oficial”)
+  const administradorasMap = useMemo(() => {
+    const m = new Map();
+    (rawData?.administradoras || []).forEach(a => { if (a?.id) m.set(String(a.id), a); });
+    return m;
+  }, [rawData]);
+
+  // Pré-processa: anexa __admName, __aKey, __pKey e aplica STRICT_MODE aqui
+  const data = useMemo(() => {
+    const prepared = (rawData.grupos || []).map(g => {
+      const admName = adminNameFromGroup(g, administradorasMap);
+      const aKey = canonAdmin(admName) || null;
+      const pKey = canonProduct(g?.produto) || null;
+      return { ...g, __admName: admName, __aKey: aKey, __pKey: pKey };
+    });
+
+    const grupos = STRICT_MODE
+      ? prepared.filter(g => g.__aKey && g.__pKey)
+      : prepared;
+
+    return { administradoras: rawData.administradoras, grupos };
+  }, [rawData, administradorasMap]);
+
+  // Lista já filtrada (interseção)
+  const filtered = useMemo(() => {
+    return (data.grupos || []).filter(g => matchGroup(g, filters));
+  }, [data, filters]);
+
+  // Selecionados para comparar (apenas do conjunto filtrado)
+  const selected = useMemo(() => {
+    const set = new Set(selectedIds);
+    r
