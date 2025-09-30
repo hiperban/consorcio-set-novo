@@ -25,6 +25,10 @@ function pct(n){
   if (!Number.isFinite(v)) return '—';
   return `${v}%`;
 }
+const isDebug = () => {
+  if (typeof window === 'undefined') return false;
+  return new URLSearchParams(window.location.search).has('debug');
+};
 
 /* ======= Config: quais métricas “melhor” ======= */
 const ROWS = [
@@ -94,7 +98,7 @@ function adminNameFromGroup(g, administradorasMap){
 
 export default function ComparePage(){
   const [rawData, setRawData] = useState({ administradoras: [], grupos: [] });
-  const [selectedIds, setSelectedIds] = useState([]);
+  const [selectedIds, setSelectedIds] = useState([]); // pode vir numérico ou string
 
   // Carrega datasets + recupera seleção
   useEffect(() => {
@@ -113,9 +117,14 @@ export default function ComparePage(){
         results.filter(r => r.status === 'rejected').forEach(r => console.warn('[Dataset ignorado]', r.reason));
         setRawData(mergeDatasets(ok));
 
+        // <-- recupera seleção e NORMALIZA para string
         try {
           const raw = localStorage.getItem('compareSelection');
-          if (raw) setSelectedIds(JSON.parse(raw));
+          if (raw) {
+            const arr = JSON.parse(raw);
+            const norm = Array.isArray(arr) ? arr.map(x => String(x)) : [];
+            setSelectedIds(norm);
+          }
         } catch {}
       } catch (e) {
         console.error(e);
@@ -143,10 +152,10 @@ export default function ComparePage(){
     return STRICT_MODE ? arr.filter(g => g.__aKey && g.__pKey) : arr;
   }, [rawData, administradorasMap]);
 
-  // Pega só os selecionados (até 4)
+  // Pega só os selecionados (até 4) — comparação por String(id)
   const cols = useMemo(() => {
-    const set = new Set(selectedIds);
-    return prepared.filter(g => set.has(g.id)).slice(0, 4);
+    const set = new Set((selectedIds || []).map(x => String(x)));
+    return prepared.filter(g => set.has(String(g.id))).slice(0, 4);
   }, [prepared, selectedIds]);
 
   // Ranking dos “melhores” por linha
@@ -172,12 +181,21 @@ export default function ComparePage(){
     return result;
   }, [cols]);
 
+  const showDebug = isDebug();
+
   return (
     <main className="container py-6 space-y-6">
       <header className="flex items-center justify-between gap-4">
         <h1 className="text-2xl font-semibold text-brand-800">Comparar Selecionados</h1>
         <Link href="/" className="text-sm text-orange-600 hover:underline">← Voltar ao simulador</Link>
       </header>
+
+      {showDebug && (
+        <div className="text-xs p-2 rounded bg-slate-50 border">
+          <strong>DEBUG →</strong>{' '}
+          {JSON.stringify({ selectedIds, received: prepared.slice(0,5).map(g=>String(g.id)) })}
+        </div>
+      )}
 
       {cols.length === 0 ? (
         <p className="text-gray-600">Você ainda não selecionou grupos compatíveis com o catálogo.</p>
@@ -196,54 +214,4 @@ export default function ComparePage(){
                       {(g.__pKey ? productLabel(g.__pKey) : g.produto) || '—'}
                     </div>
                     <div className="text-xs text-gray-500">
-                      {(g.__aKey ? adminLabel(g.__aKey) : g.__admName) || '—'}
-                    </div>
-                  </th>
-                ))}
-              </tr>
-            </thead>
-
-            <tbody>
-              {ROWS.map(row => (
-                <tr key={row.key} className="border-b">
-                  {/* primeira coluna (fixa) */}
-                  <td className="sticky left-0 z-10 bg-white border-b px-4 py-3 text-sm font-medium text-gray-700">
-                    {row.label}
-                  </td>
-
-                  {/* colunas dos selecionados */}
-                  {cols.map((g, idx) => {
-                    const winners = bestByRow.get(row.key) || new Set();
-                    const isWinner = winners.has(idx);
-                    const val = row.fmt ? row.fmt(g) : (g[row.key] ?? '—');
-
-                    // destaque verde para vencedor em linhas comparáveis
-                    const base =
-                      row.better
-                        ? (isWinner
-                            ? 'bg-emerald-50 text-emerald-800 border-emerald-100'
-                            : 'bg-white text-gray-800')
-                        : 'bg-white text-gray-800';
-
-                    return (
-                      <td key={`${row.key}::${g.id}`} className={`border-b px-4 py-3 text-sm ${base}`}>
-                        {val}
-                      </td>
-                    );
-                  })}
-                </tr>
-              ))}
-            </tbody>
-          </table>
-
-          <div className="mt-3 text-xs text-gray-500">
-            <span className="inline-block rounded px-2 py-0.5 mr-2 bg-emerald-50 text-emerald-800 border border-emerald-100">
-              destaque
-            </span>
-            indica o/a melhor valor para cada linha (regras: ver “menor é melhor / maior é melhor”).
-          </div>
-        </div>
-      )}
-    </main>
-  );
-}
+                      {(g.__aKey ? adminLabel(g.__
