@@ -97,8 +97,6 @@ export default function AdminPage() {
   loadAll();
 }, []);
 
-        );
-
         const ok = results
           .filter(r => r.status === 'fulfilled')
           .map(r => r.value.data);
