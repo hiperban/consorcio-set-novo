@@ -1,270 +1,473 @@
+// components/AdminForm.jsx
 'use client';
-import { useState } from 'react';
 
-/* ===== Helpers de máscara BRL ===== */
-function maskBRL(input) {
-  const digits = String(input || '').replace(/\D/g, '');
-  if (!digits) return '';
-  const cents = parseInt(digits, 10);
-  return (cents / 100).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
+import { useEffect, useMemo, useRef, useState } from 'react';
+import { PRODUCTS } from '@/config/catalog';
+
+/* ===== Helpers de formatação ===== */
+function onlyDigits(v) {
+  return String(v ?? '').replace(/\D+/g, '');
 }
-function parseBRLToNumber(masked) {
-  const digits = String(masked || '').replace(/\D/g, '');
-  if (!digits) return 0;
-  return parseInt(digits, 10) / 100;
+function toNumberBRL(v) {
+  const raw = String(v ?? '')
+    .replace(/\./g, '')     // remove separador de milhar
+    .replace(',', '.');     // vírgula -> ponto
+  const n = Number(raw);
+  return Number.isFinite(n) ? n : 0;
 }
 function fmtBRL(n) {
-  if (n === undefined || n === null || isNaN(Number(n))) return '';
-  return Number(n).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
+  const v = Number(n) || 0;
+  return v.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
+}
+function fmtPct(n) {
+  if (n == null || n === '') return '';
+  const v = Number(n);
+  return Number.isFinite(v) ? `${v}%` : '';
+}
+function parsePct(v) {
+  const n = String(v ?? '').replace('%','').replace(',','.');
+  const f = Number(n);
+  return Number.isFinite(f) ? f : 0;
 }
 
-export default function AdminForm({ initialData }){
-  const [data, setData] = useState(initialData || { administradoras: [], grupos: [] });
+const TIPOS = ['PARCELA INTEGRAL', 'PARCELA REDUZIDA'];
 
-  // manter campos fixos entre inclusões
-  const [keepFixed, setKeepFixed] = useState(true);
+/* ================================================================================== */
 
-  // formulário de administradora
-  const [admForm, setAdmForm] = useState({ id:'', nome:'' });
+export default function AdminForm({
+  initialData = { administradoras: [], grupos: [] },
+  produtosCatalogo, // opcional: array de labels em CAIXA ALTA
+}) {
+  // Fallback para o catálogo local caso a prop não venha
+  const PRODUTOS = useMemo(() => {
+    if (Array.isArray(produtosCatalogo) && produtosCatalogo.length) return produtosCatalogo;
+    return PRODUCTS.map(p => p.label.toUpperCase());
+  }, [produtosCatalogo]);
 
-  // formulário de grupo (com campos mascarados para valores monetários)
-  const [groupForm, setGroupForm] = useState({
-    id:'', numeroGrupo:'', administradoraId:'',
-    produto:'AUTOMOVEL', tipoGrupo:'PARCELA INTEGRAL',
-    valorCartaMasked:'',            // máscara BRL
-    valorParcelaMasked:'',          // máscara BRL
-    prazo:'', taxaAdm:'', lanceMedio:'', lanceEmbutidoPermite:'',
-    totalParticipantes:'', diaAssembleia:''
-  });
+  /* ======= Administradoras ======= */
+  const [adms, setAdms] = useState(() => initialData.administradoras || []);
+  const [admId, setAdmId] = useState('');
+  const [admNome, setAdmNome] = useState('');
 
-  /* ---------- Administradoras ---------- */
-  const addAdm = ()=>{
-    if(!admForm.id || !admForm.nome) return;
-    setData(prev=>({...prev, administradoras:[...prev.administradoras, {...admForm}]}));
-    setAdmForm({id:'', nome:''});
+  const onAddAdm = () => {
+    const id = String(admId || '').trim();
+    const nome = String(admNome || '').trim();
+    if (!id || !nome) return;
+    if (adms.some(a => String(a.id) === id)) return;
+    setAdms(prev => [...prev, { id, nome }]);
+    setAdmId('');
+    setAdmNome('');
   };
-  const removeAdm = (id)=> setData(prev=>({...prev, administradoras: prev.administradoras.filter(a=>a.id!==id)}));
+  const onRemoveAdm = (id) => {
+    setAdms(prev => prev.filter(a => String(a.id) !== String(id)));
+  };
 
-  /* ---------- Grupos ---------- */
-  // gera o "reset" do form após adicionar, preservando campos fixos se marcado
-  const resetAfterAdd = (prev) => {
-    if (!keepFixed) {
-      return {
-        id:'', numeroGrupo:'', administradoraId:'',
-        produto:'AUTOMOVEL', tipoGrupo:'PARCELA INTEGRAL',
-        valorCartaMasked:'', valorParcelaMasked:'',
-        taxaAdm:'', lanceMedio:'', lanceEmbutidoPermite:'',
-        totalParticipantes:'', diaAssembleia:'', prazo:''
-      };
+  // Importar JSON (merge simples)
+  const fileRef = useRef(null);
+  const onImportJson = async (file) => {
+    if (!file) return;
+    try {
+      const text = await file.text();
+      const json = JSON.parse(text);
+
+      const newAdms = Array.isArray(json?.administradoras) ? json.administradoras : [];
+      const newGrps = Array.isArray(json?.grupos) ? json.grupos : [];
+
+      // merge de adms (por id)
+      const byId = new Map(adms.map(a => [String(a.id), a]));
+      for (const a of newAdms) {
+        const id = String(a?.id || '').trim();
+        const nome = String(a?.nome || '').trim();
+        if (!id || !nome) continue;
+        if (!byId.has(id)) byId.set(id, { id, nome });
+      }
+      setAdms(Array.from(byId.values()));
+
+      // concatena grupos válidos
+      setGrupos(prev => {
+        const valids = newGrps
+          .map(g => sanitizeGroup(g))
+          .filter(Boolean);
+        return [...prev, ...valids];
+      });
+    } catch (e) {
+      alert('Arquivo JSON inválido.');
+    } finally {
+      if (fileRef.current) fileRef.current.value = '';
     }
-    // mantém campos "fixos" e limpa os que variam
-    return {
-      id:'', // sempre novo
-      numeroGrupo: prev.numeroGrupo,
-      administradoraId: prev.administradoraId,
-      produto: prev.produto,
-      tipoGrupo: prev.tipoGrupo,
-      valorCartaMasked:'',          // limpa para digitar o próximo valor
-      valorParcelaMasked:'',        // limpa para digitar o próximo valor
-      taxaAdm: prev.taxaAdm,
-      lanceMedio: prev.lanceMedio,
-      lanceEmbutidoPermite: prev.lanceEmbutidoPermite,
-      totalParticipantes: prev.totalParticipantes,
-      diaAssembleia: prev.diaAssembleia,
-      prazo:''                      // normalmente muda
-    };
   };
 
-  const addGroup = () => {
-    // exigir somente numeroGrupo e administradoraId
-    if (!groupForm.numeroGrupo || !groupForm.administradoraId) return;
+  /* ======= Grupos ======= */
+  const [manterFixos, setManterFixos] = useState(true);
 
-    const admName =
-      (data.administradoras || []).find(a => a.id === groupForm.administradoraId)?.nome || '';
+  // campos do form de grupos
+  const [gId, setGId] = useState('');
+  const [gNumero, setGNumero] = useState(''); // opcional
+  const [gAdmId, setGAdmId] = useState(adms[0]?.id || '');
+  const [gProduto, setGProduto] = useState(PRODUTOS[0] || 'IMOVEL');
+  const [gTipo, setGTipo] = useState(TIPOS[0]);
+  const [gValorCarta, setGValorCarta] = useState('');     // moeda
+  const [gValorParcela, setGValorParcela] = useState(''); // moeda
+  const [gTaxaAdm, setGTaxaAdm] = useState('');           // %
+  const [gLanceMedio, setGLanceMedio] = useState('');     // %
+  const [gEmbutido, setGEmbutido] = useState('');         // %
+  const [gParticipantes, setGParticipantes] = useState(''); // int
+  const [gAssembleia, setGAssembleia] = useState('');       // int (dia)
+  const [gPrazo, setGPrazo] = useState('');               // meses
 
-    // ID automático se não preencher
-    const generatedId = `G-${String(groupForm.numeroGrupo).trim()}-${Date.now()}`;
-    const id = (groupForm.id && String(groupForm.id).trim()) || generatedId;
+  const [grupos, setGrupos] = useState(() => (initialData.grupos || []).map(sanitizeGroup).filter(Boolean));
 
-    // converter máscaras para número
-    const valorCarta = parseBRLToNumber(groupForm.valorCartaMasked);
-    const valorParcela = parseBRLToNumber(groupForm.valorParcelaMasked);
+  function sanitizeGroup(g) {
+    try {
+      const id = String(g?.id || '').trim() || String(g?.numeroGrupo || '').trim();
+      const administradoraId = String(g?.administradoraId || '').trim();
+      const produto = String(g?.produto || '').trim().toUpperCase();
+      if (!id || !administradoraId || !produto) return null;
 
-    const parsed = {
-      id,
-      numeroGrupo: String(groupForm.numeroGrupo).trim(),
-      administradoraId: groupForm.administradoraId,
-      produto: groupForm.produto,
-      tipoGrupo: groupForm.tipoGrupo,
-      valorCarta,                    // número
-      valorParcela,                  // número
-      taxaAdm: Number(groupForm.taxaAdm || 0),
-      lanceMedio: Number(groupForm.lanceMedio || 0),
-      lanceEmbutidoPermite: Number(groupForm.lanceEmbutidoPermite || 0),
-      totalParticipantes: Number(groupForm.totalParticipantes || 0),
-      diaAssembleia: groupForm.diaAssembleia,
-      prazo: Number(groupForm.prazo || 0),
-      nomeAdministradora: admName,
-    };
+      return {
+        id,
+        numeroGrupo: g?.numeroGrupo ?? id,
+        administradoraId,
+        produto,                         // Admin usa label em CAIXA ALTA
+        tipoGrupo: String(g?.tipoGrupo || '').trim(),
+        valorCarta: Number(g?.valorCarta ?? 0),
+        valorParcela: Number(g?.valorParcela ?? 0),
+        taxaAdm: Number(g?.taxaAdm ?? 0),
+        lanceMedio: Number(g?.lanceMedio ?? 0),
+        embutido: g?.embutido != null ? Number(g.embutido) : null,
+        participantes: g?.participantes != null ? Number(g.participantes) : null,
+        assembleiaDia: g?.assembleiaDia != null ? Number(g.assembleiaDia) : null,
+        prazo: Number(g?.prazo ?? 0),
+      };
+    } catch {
+      return null;
+    }
+  }
 
-    setData(prev => ({ ...prev, grupos: [...(prev.grupos || []), parsed] }));
-    setGroupForm(resetAfterAdd(groupForm));
+  const resetCamposNaoFixos = () => {
+    setGId('');
+    setGValorCarta('');
+    setGValorParcela('');
+    setGPrazo('');
   };
 
-  const removeGroup = (id)=> setData(prev=>({...prev, grupos: prev.grupos.filter(g=>g.id!==id)}));
-
-  // DUPLICAR: carrega dados do grupo no formulário (ID vazio para novo)
-  const duplicateGroup = (g) => {
-    // tentar pegar o administradoraId; se não tiver, buscar pelo nome
-    const byId = g.administradoraId;
-    const byName = (data.administradoras||[]).find(a => a.nome === g.nomeAdministradora)?.id;
-    const administradoraId = byId || byName || '';
-
-    setGroupForm({
-      id:'', // novo id será digitado
-      numeroGrupo: String(g.numeroGrupo ?? ''),
-      administradoraId,
-      produto: String(g.produto ?? 'AUTOMOVEL'),
-      tipoGrupo: String(g.tipoGrupo ?? 'PARCELA INTEGRAL'),
-      valorCartaMasked: fmtBRL(g.valorCarta),
-      valorParcelaMasked: fmtBRL(g.valorParcela),
-      taxaAdm: String(g.taxaAdm ?? ''),
-      lanceMedio: String(g.lanceMedio ?? ''),
-      lanceEmbutidoPermite: String(g.lanceEmbutidoPermite ?? ''),
-      totalParticipantes: String(g.totalParticipantes ?? ''),
-      diaAssembleia: String(g.diaAssembleia ?? ''),
-      prazo: String(g.prazo ?? '')
+  const onAddGrupo = () => {
+    // valida mínimos
+    if (!gAdmId || !gProduto) return;
+    const novo = sanitizeGroup({
+      id: gId || `${gNumero || ''}`.trim() || cryptoRandomId(),
+      numeroGrupo: gNumero || gId || undefined,
+      administradoraId: gAdmId,
+      produto: gProduto, // label em CAIXA ALTA
+      tipoGrupo: gTipo,
+      valorCarta: toNumberBRL(String(gValorCarta).replace(/[^\d.,]/g, '')),
+      valorParcela: toNumberBRL(String(gValorParcela).replace(/[^\d.,]/g, '')),
+      taxaAdm: parsePct(gTaxaAdm),
+      lanceMedio: parsePct(gLanceMedio),
+      embutido: gEmbutido !== '' ? parsePct(gEmbutido) : null,
+      participantes: gParticipantes !== '' ? Number(onlyDigits(gParticipantes)) : null,
+      assembleiaDia: gAssembleia !== '' ? Number(onlyDigits(gAssembleia)) : null,
+      prazo: gPrazo !== '' ? Number(onlyDigits(gPrazo)) : 0,
     });
+    if (!novo) return;
+    setGrupos(prev => [novo, ...prev]);
 
-    if (typeof window !== 'undefined') window.scrollTo({ top: 0, behavior: 'smooth' });
+    if (manterFixos) {
+      // mantém: Numero, Administradora, Produto, Tipo, Taxa, %s, Participantes, Assembleia
+      resetCamposNaoFixos();
+    } else {
+      // limpa tudo
+      setGId('');
+      setGNumero('');
+      setGAdmId(adms[0]?.id || '');
+      setGProduto(PRODUTOS[0] || 'IMOVEL');
+      setGTipo(TIPOS[0]);
+      setGValorCarta('');
+      setGValorParcela('');
+      setGTaxaAdm('');
+      setGLanceMedio('');
+      setGEmbutido('');
+      setGParticipantes('');
+      setGAssembleia('');
+      setGPrazo('');
+    }
   };
 
-  /* ---------- Importar/Exportar JSON ---------- */
-  const downloadJson = ()=>{
-    const blob = new Blob([JSON.stringify(data, null, 2)], { type:'application/json' });
-    const url = URL.createObjectURL(blob); const a = document.createElement('a');
-    a.href = url; a.download = 'groups.json'; document.body.appendChild(a); a.click(); a.remove();
+  function cryptoRandomId() {
+    if (typeof crypto !== 'undefined' && crypto.getRandomValues) {
+      const a = crypto.getRandomValues(new Uint32Array(2));
+      return `G-${a[0].toString(16)}-${a[1].toString(16)}`;
+    }
+    return `G-${Math.random().toString(16).slice(2)}`;
+  }
+
+  const onDuplicateGrupo = (g) => {
+    const clone = { ...g, id: cryptoRandomId() };
+    setGrupos(prev => [clone, ...prev]);
   };
-  const handleUpload = (e)=>{
-    const f=e.target.files?.[0]; if(!f) return;
-    const r=new FileReader(); r.onload=()=>{ try{ setData(JSON.parse(r.result)); } catch{ alert('JSON inválido'); } }; r.readAsText(f);
+  const onRemoveGrupo = (g) => {
+    setGrupos(prev => prev.filter(x => x !== g));
   };
+
+  // Exportar JSON no formato esperado pelo simulador
+  const onExportJson = () => {
+    const payload = {
+      administradoras: adms,
+      grupos: grupos,
+    };
+    const blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' });
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = `groups_${new Date().toISOString().slice(0,10)}.json`;
+    a.click();
+    URL.revokeObjectURL(a.href);
+  };
+
+  // Adapta admin selecionada default quando muda lista
+  useEffect(() => {
+    if (!adms.length) return;
+    if (!adms.some(a => String(a.id) === String(gAdmId))) {
+      setGAdmId(adms[0].id);
+    }
+  }, [adms]); // eslint-disable-line
 
   return (
-    <div className="flex flex-col gap-6">
-      <section className="card">
-        <h3 className="font-semibold mb-3 text-brand-800">Administradoras</h3>
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-          <input placeholder="ID" className="border rounded-2xl px-3 py-2"
-                 value={admForm.id} onChange={e=>setAdmForm({...admForm,id:e.target.value})}/>
-          <input placeholder="Nome" className="border rounded-2xl px-3 py-2"
-                 value={admForm.nome} onChange={e=>setAdmForm({...admForm,nome:e.target.value})}/>
-          <button type="button" onClick={addAdm} className="btn-primary">Adicionar</button>
-          <label className="text-sm text-gray-500 flex items-center">
-            Importar JSON: <input type="file" accept="application/json" className="ml-2" onChange={handleUpload}/>
-          </label>
-        </div>
-        <ul className="mt-3 divide-y">
-          {(data.administradoras||[]).map(a=>(
-            <li key={a.id} className="py-2 flex items-center justify-between">
-              <span className="text-sm">{a.id} — <b>{a.nome}</b></span>
-              <button type="button" onClick={()=>removeAdm(a.id)} className="text-red-600 text-sm">Remover</button>
-            </li>
-          ))}
-        </ul>
-      </section>
-
-      <section className="card">
-        <h3 className="font-semibold mb-2 text-brand-800">Grupos</h3>
-
-        {/* Preferência: manter campos fixos entre inclusões */}
-        <div className="mb-3">
-          <label className="inline-flex items-center gap-2 text-sm">
-            <input type="checkbox" checked={keepFixed} onChange={e=>setKeepFixed(e.target.checked)} />
-            Manter campos fixos ao adicionar
-          </label>
-          <div className="text-xs text-gray-500 mt-1">
-            Mantém: Número, Administradora, Produto, Tipo, Taxa Adm, % Lance, % Embutido, Participantes e Assembleia. Limpa: ID, Valor Carta, Valor Parcela e Prazo.
+    <section className="space-y-8">
+      {/* ================= Administradoras ================= */}
+      <div className="border rounded-2xl p-4 bg-white">
+        <div className="flex items-center justify-between mb-3">
+          <h2 className="font-semibold text-lg">Administradoras</h2>
+          <div className="flex items-center gap-2 text-sm">
+            <label className="inline-flex items-center gap-2">
+              Importar JSON:
+              <input
+                ref={fileRef}
+                type="file"
+                accept="application/json"
+                onChange={e => onImportJson(e.target.files?.[0])}
+                className="text-sm"
+              />
+            </label>
           </div>
         </div>
 
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-          <input placeholder="ID" className="border rounded-2xl px-3 py-2"
-                 value={groupForm.id} onChange={e=>setGroupForm({...groupForm,id:e.target.value})}/>
-          <input placeholder="Número do Grupo" className="border rounded-2xl px-3 py-2"
-                 value={groupForm.numeroGrupo} onChange={e=>setGroupForm({...groupForm,numeroGrupo:e.target.value})}/>
-          <select className="border rounded-2xl px-3 py-2"
-                  value={groupForm.administradoraId}
-                  onChange={e=>setGroupForm({...groupForm,administradoraId:e.target.value})}>
-            <option value="">Administradora</option>
-            {(data.administradoras||[]).map(a=>(<option key={a.id} value={a.id}>{a.nome}</option>))}
-          </select>
-          <select className="border rounded-2xl px-3 py-2"
-                  value={groupForm.produto}
-                  onChange={e=>setGroupForm({...groupForm,produto:e.target.value})}>
-            {['AUTOMOVEL','SERVIÇOS','MOTO','IMOVEL','CAMINHÃO','CIRUGIA','OUTROS BENS'].map(p=>(<option key={p} value={p}>{p}</option>))}
-          </select>
-          <select className="border rounded-2xl px-3 py-2"
-                  value={groupForm.tipoGrupo}
-                  onChange={e=>setGroupForm({...groupForm,tipoGrupo:e.target.value})}>
-            <option>PARCELA INTEGRAL</option>
-            <option>PARCELA REDUZIDA</option>
-          </select>
-
-          {/* ===== Campos com máscara BRL ===== */}
+        <div className="grid grid-cols-1 md:grid-cols-[200px,1fr,160px] gap-3">
           <input
-            placeholder="Valor Carta"
-            type="text"
-            inputMode="numeric"
-            className="border rounded-2xl px-3 py-2"
-            value={groupForm.valorCartaMasked}
-            onChange={(e)=>setGroupForm({...groupForm, valorCartaMasked: maskBRL(e.target.value)})}
+            className="border rounded-xl px-3 py-2"
+            placeholder="ID"
+            value={admId}
+            onChange={e => setAdmId(e.target.value)}
           />
           <input
-            placeholder="Valor Parcela"
-            type="text"
-            inputMode="numeric"
-            className="border rounded-2xl px-3 py-2"
-            value={groupForm.valorParcelaMasked}
-            onChange={(e)=>setGroupForm({...groupForm, valorParcelaMasked: maskBRL(e.target.value)})}
+            className="border rounded-xl px-3 py-2"
+            placeholder="Nome"
+            value={admNome}
+            onChange={e => setAdmNome(e.target.value)}
           />
-          {/* ================================== */}
-
-          <input placeholder="Taxa Adm (%)" type="number" className="border rounded-2xl px-3 py-2"
-                 value={groupForm.taxaAdm} onChange={e=>setGroupForm({...groupForm,taxaAdm:e.target.value})}/>
-          <input placeholder="% Lance Médio" type="number" className="border rounded-2xl px-3 py-2"
-                 value={groupForm.lanceMedio} onChange={e=>setGroupForm({...groupForm,lanceMedio:e.target.value})}/>
-          <input placeholder="% Lance Embutido" type="number" className="border rounded-2xl px-3 py-2"
-                 value={groupForm.lanceEmbutidoPermite} onChange={e=>setGroupForm({...groupForm,lanceEmbutidoPermite:e.target.value})}/>
-          <input placeholder="Participantes" type="number" className="border rounded-2xl px-3 py-2"
-                 value={groupForm.totalParticipantes} onChange={e=>setGroupForm({...groupForm,totalParticipantes:e.target.value})}/>
-          <input placeholder="Dia da Assembleia (1-31)" className="border rounded-2xl px-3 py-2"
-                 value={groupForm.diaAssembleia} onChange={e=>setGroupForm({...groupForm,diaAssembleia:e.target.value})}/>
-          <input placeholder="Prazo (meses)" type="number" className="border rounded-2xl px-3 py-2"
-                 value={groupForm.prazo} onChange={e=>setGroupForm({...groupForm,prazo:e.target.value})}/>
-
-          <button type="button" onClick={addGroup} className="btn-primary">Adicionar Grupo</button>
-          <button type="button" onClick={downloadJson} className="px-3 py-2 border rounded-2xl">Exportar JSON</button>
+          <button
+            className="rounded-xl px-4 py-2 bg-orange-500 text-white hover:bg-orange-600 transition"
+            onClick={onAddAdm}
+            type="button"
+          >
+            Adicionar
+          </button>
         </div>
 
-        <ul className="mt-3 divide-y">
-          {(data.grupos||[]).map(g=>(
-            <li key={g.id} className="py-2 flex items-center justify-between text-sm">
-              <span>
-                Grupo {g.numeroGrupo} — {g.nomeAdministradora} — {g.produto} — R$ {g.valorCarta?.toLocaleString('pt-BR')}
-              </span>
-              <div className="flex gap-3">
-                <button type="button" onClick={()=>duplicateGroup(g)} className="text-brand-600 hover:underline">Duplicar</button>
-                <button type="button" onClick={()=>removeGroup(g.id)} className="text-red-600">Remover</button>
-              </div>
-            </li>
-          ))}
-        </ul>
-      </section>
-
-      <div className="text-sm text-gray-600">
-        <p><b>Publicação:</b> Exporte o JSON e substitua <code>public/data/groups.json</code> no repositório. O Vercel fará deploy automático.</p>
+        {adms.length > 0 && (
+          <ul className="mt-4 space-y-2 text-sm">
+            {adms.map(a => (
+              <li key={a.id} className="flex items-center justify-between border rounded-xl px-3 py-2">
+                <span>{a.id} — <strong>{a.nome}</strong></span>
+                <button
+                  className="text-rose-600 hover:underline"
+                  onClick={() => onRemoveAdm(a.id)}
+                  type="button"
+                >
+                  Remover
+                </button>
+              </li>
+            ))}
+          </ul>
+        )}
       </div>
-    </div>
+
+      {/* ================= Grupos ================= */}
+      <div className="border rounded-2xl p-4 bg-white">
+        <h2 className="font-semibold text-lg mb-3">Grupos</h2>
+
+        <label className="inline-flex items-center gap-2 text-sm mb-2">
+          <input
+            type="checkbox"
+            className="accent-orange-500"
+            checked={manterFixos}
+            onChange={e => setManterFixos(e.target.checked)}
+          />
+          Manter campos fixos ao adicionar
+          <span className="text-gray-500">
+            &nbsp;— Mantém: Número, Administradora, Produto, Tipo, Taxa Adm, % Lance, % Embutido, Participantes e Assembleia. Limpa: ID, Valor Carta, Valor Parcela e Prazo.
+          </span>
+        </label>
+
+        <div className="grid gap-3 grid-cols-1 md:grid-cols-2">
+          <input
+            className="border rounded-xl px-3 py-2"
+            placeholder="ID"
+            value={gId}
+            onChange={e => setGId(e.target.value)}
+          />
+          <input
+            className="border rounded-xl px-3 py-2"
+            placeholder="Número do Grupo (opcional)"
+            value={gNumero}
+            onChange={e => setGNumero(e.target.value)}
+          />
+
+          {/* Administradora */}
+          <select
+            className="border rounded-xl px-3 py-2"
+            value={gAdmId}
+            onChange={e => setGAdmId(e.target.value)}
+          >
+            {adms.map(a => (
+              <option key={a.id} value={a.id}>
+                {a.nome}
+              </option>
+            ))}
+          </select>
+
+          {/* Produto (catálogo) */}
+          <select
+            className="border rounded-xl px-3 py-2"
+            value={gProduto}
+            onChange={e => setGProduto(e.target.value)}
+          >
+            {PRODUTOS.map(p => (
+              <option key={p} value={p}>
+                {p}
+              </option>
+            ))}
+          </select>
+
+          {/* Tipo */}
+          <select
+            className="border rounded-xl px-3 py-2"
+            value={gTipo}
+            onChange={e => setGTipo(e.target.value)}
+          >
+            {TIPOS.map(t => (
+              <option key={t} value={t}>{t}</option>
+            ))}
+          </select>
+
+          {/* Valor Carta */}
+          <input
+            className="border rounded-xl px-3 py-2"
+            placeholder="R$ 15.000,00"
+            value={gValorCarta}
+            onChange={e => setGValorCarta(e.target.value)}
+          />
+
+          {/* Valor Parcela */}
+          <input
+            className="border rounded-xl px-3 py-2"
+            placeholder="R$ 1.514,56"
+            value={gValorParcela}
+            onChange={e => setGValorParcela(e.target.value)}
+          />
+
+          {/* Taxa Adm (%) */}
+          <input
+            className="border rounded-xl px-3 py-2"
+            placeholder="ex: 20"
+            value={gTaxaAdm}
+            onChange={e => setGTaxaAdm(e.target.value)}
+          />
+          {/* % Lance Médio */}
+          <input
+            className="border rounded-xl px-3 py-2"
+            placeholder="ex: 60"
+            value={gLanceMedio}
+            onChange={e => setGLanceMedio(e.target.value)}
+          />
+          {/* % Lance Embutido */}
+          <input
+            className="border rounded-xl px-3 py-2"
+            placeholder="ex: 0"
+            value={gEmbutido}
+            onChange={e => setGEmbutido(e.target.value)}
+          />
+          {/* Participantes */}
+          <input
+            className="border rounded-xl px-3 py-2"
+            placeholder="ex: 999"
+            value={gParticipantes}
+            onChange={e => setGParticipantes(e.target.value)}
+          />
+          {/* Assembleia (dia) */}
+          <input
+            className="border rounded-xl px-3 py-2"
+            placeholder="ex: 10"
+            value={gAssembleia}
+            onChange={e => setGAssembleia(e.target.value)}
+          />
+          {/* Prazo */}
+          <input
+            className="border rounded-xl px-3 py-2"
+            placeholder="ex: 84"
+            value={gPrazo}
+            onChange={e => setGPrazo(e.target.value)}
+          />
+        </div>
+
+        <div className="mt-3 grid grid-cols-1 md:grid-cols-2 gap-3">
+          <button
+            className="rounded-xl px-4 py-2 bg-orange-500 text-white hover:bg-orange-600 transition"
+            onClick={onAddGrupo}
+            type="button"
+          >
+            Adicionar Grupo
+          </button>
+
+          <button
+            className="rounded-xl px-4 py-2 bg-slate-100 border hover:bg-slate-200 transition"
+            onClick={onExportJson}
+            type="button"
+          >
+            Exportar JSON
+          </button>
+        </div>
+
+        {/* Lista de grupos atuais */}
+        {grupos.length > 0 && (
+          <ul className="mt-4 space-y-2 text-sm">
+            {grupos.map((g, idx) => (
+              <li key={`${g.id}-${idx}`} className="flex items-center justify-between border rounded-xl px-3 py-2">
+                <span>
+                  Grupo <strong>{g.numeroGrupo || g.id}</strong> —{' '}
+                  <strong>{g.administradoraId}</strong> —{' '}
+                  <strong>{g.produto}</strong> — {fmtBRL(g.valorCarta)}
+                </span>
+                <span className="flex items-center gap-4">
+                  <button
+                    className="text-slate-600 hover:underline"
+                    onClick={() => onDuplicateGrupo(g)}
+                    type="button"
+                  >
+                    Duplicar
+                  </button>
+                  <button
+                    className="text-rose-600 hover:underline"
+                    onClick={() => onRemoveGrupo(g)}
+                    type="button"
+                  >
+                    Remover
+                  </button>
+                </span>
+              </li>
+            ))}
+          </ul>
+        )}
+      </div>
+    </section>
   );
 }
