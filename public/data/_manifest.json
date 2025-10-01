@@ -1,12 +1,15 @@
 {
   "datasets": [
-    "rodobens-imovel.json",
-    "rodobens-cirurgia.json",
-    "tradicao-placa-solar.json",
-    "tradicao-equipamentos.json",
+
+  "ancora-automovel.json",
+  "rodobens-cirurgia.json",
+  "rodobens-imovel-red.json",
+   "rodobens-imovel.json",
+   "rodobens-servicos.json",
     "tradicao-cirurgia.json",
+    "tradicao-equipamentos.json",
+    "tradicao-placa-solar.json",
     "tradicao-viagens.json",
-    "rodobens-servicos.json",
     "tradicao-reformas.json"
     
   ]
