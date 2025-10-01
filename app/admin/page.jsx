@@ -3,6 +3,7 @@ export const dynamic = 'force-dynamic';
 
 import { useEffect, useState } from 'react';
 import AdminForm from '@/components/AdminForm';
+import { PRODUCTS } from '@/config/catalog'; // <- lê produtos do catálogo
 
 /* Helpers */
 function N(v) {
@@ -53,49 +54,21 @@ export default function AdminPage() {
   const [data, setData] = useState({ administradoras: [], grupos: [] });
   const [error, setError] = useState('');
 
-    useEffect(() => {
-  async function loadAll() {
-    try {
-      setError('');
-      const man = await fetch('/data/_manifest.json', { cache: 'no-store' }).then(r => r.json());
-      const files = Array.isArray(man?.datasets) ? man.datasets : [];
+  useEffect(() => {
+    async function loadAll() {
+      try {
+        setError('');
+        const man = await fetch('/data/_manifest.json', { cache: 'no-store' }).then(r => r.json());
+        const files = Array.isArray(man?.datasets) ? man.datasets : [];
 
-      const results = await Promise.allSettled(
-        files.map(async (f) => {
-          try {
+        const results = await Promise.allSettled(
+          files.map(async (f) => {
             const r = await fetch(`/data/${f}`, { cache: 'no-store' });
             if (!r.ok) throw new Error(`HTTP ${r.status} ao baixar ${f}`);
             const j = await r.json();
             return { file: f, data: j };
-          } catch (e) {
-            // propaga o nome do arquivo junto com o erro
-            throw new Error(`[${f}] ${e.message}`);
-          }
-        })
-      );
-
-      const ok = results
-        .filter(r => r.status === 'fulfilled')
-        .map(r => r.value.data);
-
-      const rejected = results.filter(r => r.status === 'rejected');
-      if (rejected.length) {
-        const lista = rejected
-          .map(r => r.reason?.message || String(r.reason))
-          .join(' | ');
-        setError(`Alguns arquivos foram ignorados: ${rejected.length}. ${lista}`);
-        rejected.forEach(r => console.warn('[Dataset ignorado]', r.reason));
-      }
-
-      setData(mergeDatasets(ok));
-    } catch (e) {
-      console.error(e);
-      setError('Não foi possível carregar os dados.');
-      setData({ administradoras: [], grupos: [] });
-    }
-  }
-  loadAll();
-}, []);
+          })
+        );
 
         const ok = results
           .filter(r => r.status === 'fulfilled')
@@ -103,7 +76,10 @@ export default function AdminPage() {
 
         const rejected = results.filter(r => r.status === 'rejected');
         if (rejected.length) {
-          setError(`Alguns arquivos foram ignorados: ${rejected.length}. Veja o console para detalhes.`);
+          const lista = rejected
+            .map(r => r.reason?.message || String(r.reason))
+            .join(' | ');
+          setError(`Alguns arquivos foram ignorados: ${rejected.length}. ${lista}`);
           rejected.forEach(r => console.warn('[Dataset ignorado]', r.reason));
         }
 
@@ -138,10 +114,16 @@ export default function AdminPage() {
     );
   }
 
+  // Monta lista de produtos a partir do catálogo (em CAIXA ALTA)
+  const produtosCatalogo = PRODUCTS.map(p => p.label.toUpperCase());
+
   return (
     <main className="container py-6 space-y-6">
       <h1 className="text-2xl font-semibold text-brand-800">Admin</h1>
-      <AdminForm initialData={data} />
+      <AdminForm
+        initialData={data}
+        produtosCatalogo={produtosCatalogo}
+      />
     </main>
   );
 }
