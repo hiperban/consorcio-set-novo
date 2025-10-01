@@ -1,6 +1,5 @@
 {
   "datasets": [
-
   "ancora-automovel.json",
   "rodobens-cirurgia.json",
   "rodobens-imovel-red.json",
@@ -10,7 +9,6 @@
     "tradicao-equipamentos.json",
     "tradicao-placa-solar.json",
     "tradicao-viagens.json",
-    "tradicao-reformas.json"
-    
+    "tradicao-reformas.json"    
   ]
 }
