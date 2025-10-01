@@ -3,9 +3,9 @@ export const dynamic = 'force-dynamic';
 
 import { useEffect, useState } from 'react';
 import AdminForm from '@/components/AdminForm';
-import { PRODUCTS } from '@/config/catalog'; // <- lê produtos do catálogo
+import { PRODUCTS } from '@/config/catalog'; // lê produtos do catálogo
 
-/* Helpers */
+/* Helpers (mantidos) */
 function N(v) {
   return String(v ?? '')
     .normalize('NFD')
@@ -17,6 +17,7 @@ function N(v) {
 function mergeDatasets(list) {
   const admMap = new Map();
   const grupos = [];
+
   for (const d of list || []) {
     const adms = Array.isArray(d?.administradoras) ? d.administradoras : [];
     const gs   = Array.isArray(d?.grupos) ? d.grupos : [];
@@ -43,10 +44,15 @@ function mergeDatasets(list) {
         valorParcela: Number(g?.valorParcela ?? 0),
         taxaAdm: Number(g?.taxaAdm ?? 0),
         lanceMedio: Number(g?.lanceMedio ?? 0),
+        embutido: g?.embutido != null ? Number(g.embutido) : null,
+        participantes: g?.participantes != null ? Number(g.participantes) : null,
+        assembleiaDia: g?.assembleiaDia != null ? Number(g.assembleiaDia) : null,
         prazo: Number(g?.prazo ?? 0),
+        numeroGrupo: g?.numeroGrupo,
       });
     });
   }
+
   return { administradoras: Array.from(admMap.values()), grupos };
 }
 
@@ -55,49 +61,25 @@ export default function AdminPage() {
   const [error, setError] = useState('');
 
   useEffect(() => {
-  async function loadAll() {
-    try {
-      setError('');
-      const man = await fetch('/data/_manifest.json', { cache: 'no-store' }).then(r => r.json());
-      const files = Array.isArray(man?.datasets) ? man.datasets : [];
+    async function loadAll() {
+      try {
+        setError('');
+        const man = await fetch('/data/_manifest.json', { cache: 'no-store' }).then(r => r.json());
+        const files = Array.isArray(man?.datasets) ? man.datasets : [];
 
-      const results = await Promise.allSettled(
-        files.map(async (f) => {
-          try {
-            const r = await fetch(`/data/${f}`, { cache: 'no-store' });
-            if (!r.ok) throw new Error(`HTTP ${r.status} ao baixar ${f}`);
-            const j = await r.json(); // se for JSON inválido vai cair no catch
-            return { file: f, data: j };
-          } catch (e) {
-            throw new Error(`[${f}] ${e.message}`);
-          }
-        })
-      );
-
-      const ok = results
-        .filter(r => r.status === 'fulfilled')
-        .map(r => r.value.data);
-
-      const rejected = results.filter(r => r.status === 'rejected');
-      if (rejected.length) {
-        const lista = rejected
-          .map(r => r.reason?.message || String(r.reason))
-          .join(' | ');
-        setError(`Alguns arquivos foram ignorados: ${rejected.length}. ${lista}`);
-        console.warn('[Datasets ignorados]', lista);
-      }
-
-      setData(mergeDatasets(ok));
-    } catch (e) {
-      console.error(e);
-      setError('Não foi possível carregar os dados.');
-      setData({ administradoras: [], grupos: [] });
-    }
-  }
-
-  loadAll();
-}, []);
-
+        const results = await Promise.allSettled(
+          files.map(async (f) => {
+            try {
+              const r = await fetch(`/data/${f}`, { cache: 'no-store' });
+              if (!r.ok) throw new Error(`HTTP ${r.status} ao baixar ${f}`);
+              const j = await r.json(); // se JSON inválido, cai no catch
+              return { file: f, data: j };
+            } catch (e) {
+              // propaga com o nome do arquivo
+              throw new Error(`[${f}] ${e.message}`);
+            }
+          })
+        );
 
         const ok = results
           .filter(r => r.status === 'fulfilled')
@@ -109,7 +91,7 @@ export default function AdminPage() {
             .map(r => r.reason?.message || String(r.reason))
             .join(' | ');
           setError(`Alguns arquivos foram ignorados: ${rejected.length}. ${lista}`);
-          rejected.forEach(r => console.warn('[Dataset ignorado]', r.reason));
+          console.warn('[Datasets ignorados]', lista);
         }
 
         setData(mergeDatasets(ok));
@@ -119,6 +101,7 @@ export default function AdminPage() {
         setData({ administradoras: [], grupos: [] });
       }
     }
+
     loadAll();
   }, []);
 
@@ -128,7 +111,7 @@ export default function AdminPage() {
         <h1 className="text-2xl font-semibold text-brand-800">Admin</h1>
         <div className="p-4 border rounded-2xl bg-yellow-50 text-yellow-800">
           <p className="font-medium mb-1">Aviso</p>
-          <p className="text-sm">{error}</p>
+          <p className="text-sm whitespace-pre-wrap">{error}</p>
           <p className="text-sm mt-2">
             Dica: valide a estrutura do JSON novo (administradoras[], grupos[]) e campos obrigatórios.
           </p>
@@ -143,7 +126,7 @@ export default function AdminPage() {
     );
   }
 
-  // Monta lista de produtos a partir do catálogo (em CAIXA ALTA)
+  // Produtos do catálogo (em CAIXA ALTA para o form)
   const produtosCatalogo = PRODUCTS.map(p => p.label.toUpperCase());
 
   return (
