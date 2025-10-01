@@ -1,30 +1,22 @@
 'use client';
 export const dynamic = 'force-dynamic';
 
-import { useEffect, useMemo, useState } from 'react';
-import Link from 'next/link';
-import Filters from '@/components/Filters';
-import GroupCard from '@/components/GroupCard';
-import {
-  STRICT_MODE,
-  canonProduct, productLabel,
-  canonAdmin,   adminLabel,
-} from '@/config/catalog';
+import { useEffect, useState } from 'react';
+import AdminForm from '@/components/AdminForm';
+import { PRODUCTS } from '@/config/catalog'; // <-- NOVO
 
 /* Helpers */
 function N(v) {
   return String(v ?? '')
     .normalize('NFD')
     .replace(/[\u0300-\u036f]/g, '')
-    .trim()
-    .toUpperCase();
+    .trim();
 }
 
-/* Junta datasets com sanitização básica */
+/* Junta datasets com sanitização */
 function mergeDatasets(list) {
-  const admMap = new Map(); // id -> {id,nome}
+  const admMap = new Map();
   const grupos = [];
-
   for (const d of list || []) {
     const adms = Array.isArray(d?.administradoras) ? d.administradoras : [];
     const gs   = Array.isArray(d?.grupos) ? d.grupos : [];
@@ -39,7 +31,6 @@ function mergeDatasets(list) {
       const id = String(g?.id || '').trim();
       const administradoraId = String(g?.administradoraId || '').trim();
       const produto = String(g?.produto || '').trim();
-      const tipoGrupo = String(g?.tipoGrupo || '').trim();
       if (!id || !administradoraId || !produto) return;
 
       grupos.push({
@@ -47,7 +38,7 @@ function mergeDatasets(list) {
         id,
         administradoraId,
         produto,
-        tipoGrupo,
+        tipoGrupo: String(g?.tipoGrupo || '').trim(),
         valorCarta: Number(g?.valorCarta ?? 0),
         valorParcela: Number(g?.valorParcela ?? 0),
         taxaAdm: Number(g?.taxaAdm ?? 0),
@@ -56,53 +47,17 @@ function mergeDatasets(list) {
       });
     });
   }
-
   return { administradoras: Array.from(admMap.values()), grupos };
 }
 
-function adminNameFromGroup(g, administradorasMap){
-  const id = String(g?.administradoraId ?? '');
-  const byId = administradorasMap.get(id)?.nome;
-  return byId || g?.nomeAdministradora || '';
-}
+export default function AdminPage() {
+  const [data, setData] = useState({ administradoras: [], grupos: [] });
+  const [error, setError] = useState('');
 
-/* Regra única de casamento de filtros (usada no useMemo e também no render) */
-function matchGroup(g, filters) {
-  const { minCarta, maxCarta, admKey, produtoKey, tipoGrupo, lanceMin, prazo } = filters || {};
-  const aKey = g.__aKey;
-  const pKey = g.__pKey;
-
-  if (STRICT_MODE && (!aKey || !pKey)) return false;
-
-  const okAdm   = !admKey     ? true : String(aKey) === String(admKey);
-  const okProd  = !produtoKey ? true : String(pKey) === String(produtoKey);
-  const okTipo  = !tipoGrupo  ? true : N(g?.tipoGrupo) === String(tipoGrupo);
-
-  const okMin   = minCarta == null ? true : Number(g?.valorCarta ?? 0)  >= Number(minCarta);
-  const okMax   = maxCarta == null ? true : Number(g?.valorCarta ?? 0)  <= Number(maxCarta);
-  const okLance = lanceMin == null ? true : Number(g?.lanceMedio ?? 0) >= Number(lanceMin);
-  const okPrazo = prazo == null    ? true : Number(g?.prazo ?? 0)      === Number(prazo);
-
-  return okAdm && okProd && okTipo && okMin && okMax && okLance && okPrazo;
-}
-
-export default function Home() {
-  const [rawData, setRawData] = useState({ administradoras: [], grupos: [] });
-  const [filters, setFilters] = useState({});
-  const [selectedIds, setSelectedIds] = useState([]);
-
-  // controla exibição do painel de debug via ?debug
-  const [showDebug, setShowDebug] = useState(false);
-  useEffect(() => {
-    try {
-      setShowDebug(new URLSearchParams(window.location.search).has('debug'));
-    } catch {}
-  }, []);
-
-  // Carrega manifest + datasets (tolerante a falhas)
   useEffect(() => {
     async function loadAll() {
       try {
+        setError('');
         const man = await fetch('/data/_manifest.json', { cache: 'no-store' }).then(r => r.json());
         const files = Array.isArray(man?.datasets) ? man.datasets : [];
 
@@ -121,139 +76,53 @@ export default function Home() {
           .filter(r => r.status === 'fulfilled')
           .map(r => r.value.data);
 
-        results
-          .filter(r => r.status === 'rejected')
-          .forEach(r => console.warn('[Dataset ignorado]', r.reason));
+        const rejected = results.filter(r => r.status === 'rejected');
+        if (rejected.length) {
+          setError(`Alguns arquivos foram ignorados: ${rejected.length}. Veja o console para detalhes.`);
+          rejected.forEach(r => console.warn('[Dataset ignorado]', r.reason));
+        }
 
-        setRawData(mergeDatasets(ok));
-
-        try {
-          const raw = localStorage.getItem('compareSelection');
-          if (raw) setSelectedIds(JSON.parse(raw));
-        } catch {}
+        setData(mergeDatasets(ok));
       } catch (e) {
-        console.error('Erro ao carregar datasets:', e);
-        setRawData({ administradoras: [], grupos: [] });
+        console.error(e);
+        setError('Não foi possível carregar os dados.');
+        setData({ administradoras: [], grupos: [] });
       }
     }
     loadAll();
   }, []);
 
-  // Mapa de administradoras por id (para descobrir o nome “oficial”)
-  const administradorasMap = useMemo(() => {
-    const m = new Map();
-    (rawData?.administradoras || []).forEach(a => { if (a?.id) m.set(String(a.id), a); });
-    return m;
-  }, [rawData]);
+  if (error) {
+    return (
+      <main className="container py-6 space-y-6">
+        <h1 className="text-2xl font-semibold text-brand-800">Admin</h1>
+        <div className="p-4 border rounded-2xl bg-yellow-50 text-yellow-800">
+          <p className="font-medium mb-1">Aviso</p>
+          <p className="text-sm">{error}</p>
+          <p className="text-sm mt-2">
+            Dica: valide a estrutura do JSON novo (administradoras[], grupos[]) e campos obrigatórios.
+          </p>
+          <ol className="list-decimal ml-4 text-sm mt-2 space-y-1">
+            <li>Inclua <code>administradoras</code> com <code>id</code> e <code>nome</code>.</li>
+            <li>Nos <code>grupos</code>, garanta: <code>id</code>, <code>administradoraId</code>, <code>produto</code>, <code>valorCarta</code>, <code>valorParcela</code>, <code>prazo</code>.</li>
+            <li>Atualize <code>_manifest.json</code> adicionando o arquivo em <code>datasets</code>.</li>
+            <li>Evite espaços ou caracteres especiais na chave. Use letras/números simples.</li>
+          </ol>
+        </div>
+      </main>
+    );
+  }
 
-  // Pré-processa: anexa __admName, __aKey, __pKey e aplica STRICT_MODE aqui
-  const data = useMemo(() => {
-    const prepared = (rawData.grupos || []).map(g => {
-      const admName = adminNameFromGroup(g, administradorasMap);
-      const aKey = canonAdmin(admName) || null;
-      const pKey = canonProduct(g?.produto) || null;
-      return { ...g, __admName: admName, __aKey: aKey, __pKey: pKey };
-    });
-
-    const grupos = STRICT_MODE
-      ? prepared.filter(g => g.__aKey && g.__pKey)
-      : prepared;
-
-    return { administradoras: rawData.administradoras, grupos };
-  }, [rawData, administradorasMap]);
-
-  // Lista já filtrada (interseção)
-  const filtered = useMemo(() => {
-    return (data.grupos || []).filter(g => matchGroup(g, filters));
-  }, [data, filters]);
-
-  // Selecionados para comparar (apenas do conjunto filtrado)
-  const selected = useMemo(() => {
-    const set = new Set(selectedIds);
-    return filtered.filter(g => set.has(g.id)).slice(0, 4);
-  }, [selectedIds, filtered]);
-
-  // Toggle compare
-  const onToggleCompare = (id) => {
-    setSelectedIds(prev => {
-      const set = new Set(prev);
-      if (set.has(id)) set.delete(id);
-      else if (set.size < 4) set.add(id);
-      const arr = Array.from(set);
-      try { localStorage.setItem('compareSelection', JSON.stringify(arr)); } catch {}
-      return arr;
-    });
-  };
+  // Monta lista de produtos a partir do catálogo (em CAIXA ALTA para bater com o form atual)
+  const produtosCatalogo = PRODUCTS.map(p => p.label.toUpperCase());
 
   return (
     <main className="container py-6 space-y-6">
-      <header>
-        <h1 className="text-2xl font-semibold text-brand-800">Simulador de Consórcio</h1>
-        <p className="text-sm text-gray-600">Filtros com interseção de critérios (Admin × Produto × Tipo × Faixas).</p>
-      </header>
-
-      {/* Painel de debug: só aparece com ?debug */}
-      {showDebug && (
-        <div className="text-xs p-2 rounded bg-slate-50 border">
-          <strong>DEBUG filtros →</strong>{' '}
-          {JSON.stringify(filters)}
-        </div>
-      )}
-
-      <Filters data={data} onFilterChange={setFilters} />
-
-      {/* Remount forçado do grid quando os filtros mudam */}
-      <div
-        key={[
-          filters.admKey || '',
-          filters.produtoKey || '',
-          filters.tipoGrupo || '',
-          filters.minCarta ?? '',
-          filters.maxCarta ?? '',
-          filters.lanceMin ?? '',
-          filters.prazo ?? '',
-        ].join('|')}
-        className="grid gap-6 [grid-template-columns:repeat(auto-fit,minmax(404px,1fr))]"
-      >
-        {filtered.map(g => {
-          // Defesa final: mesmo que algo mude no meio do render, só mostra se casar
-          if (!matchGroup(g, filters)) return null;
-
-          // Chave composta para impedir reciclagem errada pelo React
-          const compositeKey = `${g.id}::${g.__aKey || ''}::${g.__pKey || ''}`;
-
-          return (
-            <GroupCard
-              key={compositeKey}
-              group={g}
-              administradoraName={adminLabel(g.__aKey) || g.__admName}
-              productLabel={productLabel(g.__pKey) || g?.produto}
-              inCompare={selectedIds.includes(g.id)}
-              onToggleCompare={() => onToggleCompare(g.id)}
-            />
-          );
-        })}
-      </div>
-
-      {/* Poupizinho (sticky) quando houver selecionados */}
-      {selected.length > 0 && (
-        <section className="sticky bottom-4 bg-white border rounded-2xl shadow p-4">
-          <div className="flex items-center justify-between gap-4 flex-wrap">
-            <div className="text-sm">
-              <strong>{selected.length}</strong> grupo(s) no comparativo:
-              <span className="ml-2 text-gray-600">
-                {selected.map(s => `#${s.numeroGrupo || s.id}`).join(', ')}
-              </span>
-            </div>
-            <Link
-              href="/compare"
-              className="rounded-xl px-4 py-2 bg-orange-500 text-white hover:bg-orange-600 transition"
-            >
-              Ir para comparar
-            </Link>
-          </div>
-        </section>
-      )}
+      <h1 className="text-2xl font-semibold text-brand-800">Admin</h1>
+      <AdminForm
+        initialData={data}
+        produtosCatalogo={produtosCatalogo} // <-- NOVO
+      />
     </main>
   );
 }
