@@ -1,6 +1,7 @@
 // components/GroupCard.jsx
 'use client';
-import { useMemo } from 'react';
+import { useMemo, useState } from 'react';
+import ContractModal from '@/components/ContractModal';
 
 function formatBRL(n) {
   const v = Number(n) || 0;
@@ -17,6 +18,9 @@ function N(v){
     .trim().toUpperCase();
 }
 
+// URL padrão de contratação (pode trocar por mapa por produto/admin se quiser)
+const DEFAULT_CONTRACT_URL = 'https://loja.hiperban.com.br/SB59pZUm';
+
 export default function GroupCard({
   group,
   administradoraName,
@@ -30,12 +34,15 @@ export default function GroupCard({
     return new URLSearchParams(window.location.search).has('debug');
   }, []);
 
-  const prazoMeses   = Number(group?.prazo ?? 0) || 0;
-  const taxaAdm      = group?.taxaAdm;
-  const lanceMedio   = group?.lanceMedio;
-  const embutido     = group?.embutido;        // pode ser 0
-  const participantes = group?.participantes;  // pode ser 0
-  const assembleiaDia = group?.assembleiaDia;  // pode ser 0
+  // Modal de contratação
+  const [openContract, setOpenContract] = useState(false);
+
+  const prazoMeses    = Number(group?.prazo ?? 0) || 0;
+  const taxaAdm       = group?.taxaAdm;
+  const lanceMedio    = group?.lanceMedio;
+  const embutido      = group?.embutido;        // pode ser 0
+  const participantes = group?.participantes;   // pode ser 0
+  const assembleiaDia = group?.assembleiaDia;   // pode ser 0
 
   const tipoNorm = N(group?.tipoGrupo);
   const tipoIsIntegral = tipoNorm === 'PARCELA INTEGRAL';
@@ -47,18 +54,22 @@ export default function GroupCard({
       : 'bg-slate-100 text-slate-600 border-slate-200';
   const tipoLabel = group?.tipoGrupo || '—';
 
+  // Se futuramente quiser variar a URL por produto/admin, dá pra usar um map aqui:
+  // const CONTRACT_BY_PRODUCT = { IMOVEL: 'https://...', CIRURGIA: 'https://...' };
+  // const contractUrl = CONTRACT_BY_PRODUCT[group.__pKey] || DEFAULT_CONTRACT_URL;
+  const contractUrl = DEFAULT_CONTRACT_URL;
+
   return (
     <article
       className="relative border rounded-2xl p-4 shadow-sm bg-white"
-      // ====== DATA ATTRS PARA DEBUG / INSPEÇÃO ======
       data-group-id={group?.id ?? ''}
       data-admin-id={group?.administradoraId ?? ''}
       data-admin-name={administradoraName ?? ''}
-      data-admin-key={group?.__aKey ?? ''}        // ex: RODOBENS
-      data-product-raw={group?.produto ?? ''}     // ex: "PLACA SOLAR"
-      data-product-label={productLabel ?? ''}     // ex: "Placa Solar"
-      data-product-key={group?.__pKey ?? ''}      // ex: PLACA_SOLAR
-      data-tipo={group?.tipoGrupo ?? ''}          // ex: PARCELA INTEGRAL
+      data-admin-key={group?.__aKey ?? ''}
+      data-product-raw={group?.produto ?? ''}
+      data-product-label={productLabel ?? ''}
+      data-product-key={group?.__pKey ?? ''}
+      data-tipo={group?.tipoGrupo ?? ''}
       data-carta={group?.valorCarta ?? ''}
       data-parcela={group?.valorParcela ?? ''}
       data-prazo={prazoMeses}
@@ -116,7 +127,7 @@ export default function GroupCard({
           <div className="font-medium">{tipoLabel}</div>
         </div>
 
-        {/* === Campos que tinham sumido: agora sempre mostram (com fallback) === */}
+        {/* Sempre visíveis, com fallback */}
         <div>
           <div className="text-gray-500">% Lance Embutido:</div>
           <div className="font-medium">{embutido != null ? pct(embutido) : '—'}</div>
@@ -129,7 +140,6 @@ export default function GroupCard({
           <div className="text-gray-500">Assembleia (dia):</div>
           <div className="font-medium">{assembleiaDia != null ? assembleiaDia : '—'}</div>
         </div>
-        {/* ocupa a coluna faltante pra manter a grade alinhada */}
         <div />
       </div>
 
@@ -143,14 +153,23 @@ export default function GroupCard({
           />
           Incluir no comparativo
         </label>
+
+        {/* Botão abre o modal */}
         <button
           className="rounded-xl px-4 py-2 bg-orange-500 text-white hover:bg-orange-600 transition"
-          onClick={() => alert('Fluxo de contratação aqui')}
+          onClick={() => setOpenContract(true)}
           type="button"
         >
           Contratar
         </button>
       </div>
+
+      {/* Modal com embed Respondi */}
+      <ContractModal
+        open={openContract}
+        onClose={() => setOpenContract(false)}
+        src={contractUrl}
+      />
     </article>
   );
 }
