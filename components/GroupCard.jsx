@@ -145,7 +145,7 @@ export default function GroupCard({
         </label>
         <button
           className="rounded-xl px-4 py-2 bg-orange-500 text-white hover:bg-orange-600 transition"
-          onClick={() => alert('Fluxo de contratação aqui')}
+          onClick={(https://loja.hiperban.com.br/SB59pZUm) => alert('Fluxo de contratação aqui')}
           type="button"
         >
           Contratar
