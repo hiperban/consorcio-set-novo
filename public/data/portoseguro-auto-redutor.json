@@ -1,0 +1,25 @@
+{
+  "administradoras": [
+    {
+      "id": "4",
+      "nome": "Porto Seguro"
+    }
+  ],
+  "grupos": [
+    {
+      "id": "AF310 - RED 20%",
+      "numeroGrupo": "AF310 - RED 20%",
+      "administradoraId": "4",
+      "produto": "VEICULO",
+      "tipoGrupo": "PARCELA REDUZIDA",
+      "valorCarta": 26282.5,
+      "valorParcela": 693.87,
+      "taxaAdm": 18,
+      "lanceMedio": 49.96,
+      "embutido": 30,
+      "participantes": 999,
+      "assembleiaDia": 21,
+      "prazo": 36
+    }
+  ]
+}
