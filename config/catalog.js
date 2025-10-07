@@ -17,7 +17,7 @@ export const ADMINS = [
   { key: 'RODOBENS', label: 'Rodobens', synonyms: ['RODOBENS'] },
   { key: 'TRADICAO', label: 'Tradição', synonyms: ['TRADICAO', 'TRADIÇÃO'] },
   { key: 'PORTO_SEGURO', label: 'Porto Seguro', synonyms: ['PORTO SEGURO', 'PORTO_SEGURO', 'PORTOSEGUR0', 'PORTO'] },
-   { key: 'ANCORA', label: 'ANCORA', synonyms: ['ANCORA', 'ÂNCORA'] },
+   { key: 'Ancora', label: 'ANCORA', synonyms: ['ANCORA', 'ÂNCORA'] },
   // Exemplo de como adicionar:
   // { key: 'OUTRA', label: 'Outra Adm', synonyms: ['OUTRA', 'OUTRA ADM'] },
 ];
@@ -29,7 +29,7 @@ export const PRODUCTS = [
   { key: 'CIRURGIA',      label: 'Cirurgia',      synonyms: ['CIRURGIA'] },
   { key: 'SERVICOS',      label: 'Serviços',      synonyms: ['SERVICOS', 'SERVIÇOS'] },
   { key: 'REFORMAS',      label: 'Reformas',      synonyms: ['REFORMAS'] },
-  { key: 'VEICULO',       label: 'VEICULO',       synonyms: ['VEICULO', 'AUTO','AUTOMOVEL'] },
+  { key: 'VEICULO',       label: 'Veículo',       synonyms: ['VEICULO', 'AUTO','AUTOMOVEL','Veículo'] },
   { key: 'VIAGENS',       label: 'Viagens',       synonyms: ['VIAGENS'] },
   // Exemplo de novo produto:
   // { key: 'AUTO', label: 'Auto', synonyms: ['AUTO', 'AUTOMOVEL', 'AUTOMÓVEL'] },
