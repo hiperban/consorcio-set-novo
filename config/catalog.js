@@ -28,7 +28,7 @@ export const PRODUCTS = [
   { key: 'CIRURGIA',      label: 'Cirurgia',      synonyms: ['CIRURGIA'] },
   { key: 'SERVICOS',      label: 'Serviços',      synonyms: ['SERVICOS', 'SERVIÇOS'] },
   { key: 'REFORMAS',      label: 'Reformas',      synonyms: ['REFORMAS'] },
-  { key: 'VEICULO',       label: 'VEICULO',       synonyms: ['VEICULO'] },
+  { key: 'VEICULO',       label: 'VEICULO',       synonyms: ['VEICULO', 'AUTO','AUTOMOVEL'] },
   { key: 'VIAGENS',       label: 'Viagens',       synonyms: ['VIAGENS'] },
   // Exemplo de novo produto:
   // { key: 'AUTO', label: 'Auto', synonyms: ['AUTO', 'AUTOMOVEL', 'AUTOMÓVEL'] },
