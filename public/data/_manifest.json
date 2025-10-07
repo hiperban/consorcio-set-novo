@@ -1,6 +1,7 @@
 {
   "datasets": [
   "ancora-automovel-inte.json",
+    "ancora-viagens.json",
    "rodobens-imovel.json",
     "rodobens-imovel-faixa2.json",
     "rodobens-imovel-faixa3.json",
