@@ -17,6 +17,7 @@ export const ADMINS = [
   { key: 'RODOBENS', label: 'Rodobens', synonyms: ['RODOBENS'] },
   { key: 'TRADICAO', label: 'Tradição', synonyms: ['TRADICAO', 'TRADIÇÃO'] },
   { key: 'PORTO_SEGURO', label: 'Porto Seguro', synonyms: ['PORTO SEGURO', 'PORTO_SEGURO', 'PORTOSEGUR0', 'PORTO'] },
+   { key: 'ANCORA', label: 'ANCORA', synonyms: ['ANCORA', 'ÂNCORA'] },
   // Exemplo de como adicionar:
   // { key: 'OUTRA', label: 'Outra Adm', synonyms: ['OUTRA', 'OUTRA ADM'] },
 ];
