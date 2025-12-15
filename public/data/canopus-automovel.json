@@ -1,0 +1,100 @@
+{
+  "administradoras": [
+    {
+      "id": "5",
+      "nome": "CANOPUS"
+    }
+  ],
+  "grupos": [
+    {
+      "id": "8120 - NOVO",
+      "numeroGrupo": "8120 - NOVO",
+      "administradoraId": "5",
+      "produto": "VEÍCULO",
+      "tipoGrupo": "PARCELA INTEGRAL",
+      "valorCarta": 50000,
+      "valorParcela": 653.55,
+      "taxaAdm": 20.8,
+      "lanceMedio": 0,
+      "embutido": 30,
+      "participantes": 3000,
+      "assembleiaDia": 16,
+      "prazo": 96
+    },
+    {
+      "id": "8120 - NOVO",
+      "numeroGrupo": "8120 - NOVO",
+      "administradoraId": "5",
+      "produto": "VEÍCULO",
+      "tipoGrupo": "PARCELA INTEGRAL",
+      "valorCarta": 45000,
+      "valorParcela": 588.2,
+      "taxaAdm": 20.8,
+      "lanceMedio": 0,
+      "embutido": 30,
+      "participantes": 3000,
+      "assembleiaDia": 16,
+      "prazo": 96
+    },
+    {
+      "id": "8120 - NOVO",
+      "numeroGrupo": "8120 - NOVO",
+      "administradoraId": "5",
+      "produto": "VEÍCULO",
+      "tipoGrupo": "PARCELA INTEGRAL",
+      "valorCarta": 40000,
+      "valorParcela": 522.84,
+      "taxaAdm": 20.8,
+      "lanceMedio": 0,
+      "embutido": 30,
+      "participantes": 3000,
+      "assembleiaDia": 16,
+      "prazo": 96
+    },
+    {
+      "id": "8120 - NOVO",
+      "numeroGrupo": "8120 - NOVO",
+      "administradoraId": "5",
+      "produto": "VEÍCULO",
+      "tipoGrupo": "PARCELA INTEGRAL",
+      "valorCarta": 35000,
+      "valorParcela": 457.49,
+      "taxaAdm": 20.8,
+      "lanceMedio": 0,
+      "embutido": 30,
+      "participantes": 3000,
+      "assembleiaDia": 16,
+      "prazo": 96
+    },
+    {
+      "id": "8120 - NOVO",
+      "numeroGrupo": "8120 - NOVO",
+      "administradoraId": "5",
+      "produto": "VEÍCULO",
+      "tipoGrupo": "PARCELA INTEGRAL",
+      "valorCarta": 30000,
+      "valorParcela": 392.13,
+      "taxaAdm": 20.8,
+      "lanceMedio": 0,
+      "embutido": 30,
+      "participantes": 3000,
+      "assembleiaDia": 16,
+      "prazo": 96
+    },
+    {
+      "id": "8120 - NOVO",
+      "numeroGrupo": "8120 - NOVO",
+      "administradoraId": "5",
+      "produto": "VEÍCULO",
+      "tipoGrupo": "PARCELA INTEGRAL",
+      "valorCarta": 25000,
+      "valorParcela": 326.78,
+      "taxaAdm": 20.8,
+      "lanceMedio": 0,
+      "embutido": 30,
+      "participantes": 3000,
+      "assembleiaDia": 16,
+      "prazo": 96
+    }
+  ]
+}
